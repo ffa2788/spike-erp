@@ -45,8 +45,14 @@ export function salesJournal(input: {
   taxCents: number;
   totalCents: number;
   feeCents?: number;
+  discountCents?: number;
+  freightCents?: number;
+  insuranceCents?: number;
 }): DraftLine[] {
   const fee = input.feeCents ?? 0;
+  const discount = input.discountCents ?? 0;
+  const freight = input.freightCents ?? 0;
+  const insurance = input.insuranceCents ?? 0;
   const lines: DraftLine[] = [
     {
       accountCode: CODES.ar,
@@ -54,10 +60,18 @@ export function salesJournal(input: {
       creditCents: 0,
       memo: "Customer owes this invoice",
     },
-    { accountCode: CODES.sales, debitCents: 0, creditCents: input.subtotalCents, memo: "Product sales" },
+    {
+      accountCode: CODES.sales,
+      debitCents: 0,
+      creditCents: input.subtotalCents + discount + freight + insurance,
+      memo: "Product sales",
+    },
   ];
+  if (discount > 0) {
+    lines.push({ accountCode: CODES.salesDiscount, debitCents: discount, creditCents: 0, memo: "Sales discount" });
+  }
   if (fee > 0) {
-    lines.push({ accountCode: CODES.amazonFees, debitCents: fee, creditCents: 0, memo: "Amazon fees" });
+    lines.push({ accountCode: CODES.amazonFees, debitCents: fee, creditCents: 0, memo: "Marketplace fees" });
   }
   if (input.taxCents > 0) {
     lines.push({ accountCode: CODES.tax, debitCents: 0, creditCents: input.taxCents, memo: "Sales tax" });

@@ -13,7 +13,7 @@ export default function ImportPage() {
       <p className="lede">
         Peachtree 2011 files can be customers, suppliers, items, accounts, or a journal. SPIKE shows a preview and skips bad rows. Nothing is saved until you confirm.
       </p>
-      <p>Amazon orders are a file import only. SPIKE does not connect to Amazon. Fees are recorded as an expense, not as sales.</p>
+      <p>Amazon and Walmart orders can be imported from a CSV when those connections are not set up. Fees are recorded as an expense, not as sales. Connected accounts are under Sales.</p>
       {state.error && <div className="banner bad">Problem: {state.error}</div>}
       {state.notice && <div className="banner good">Done: {state.notice}</div>}
       <form action={action}>
@@ -26,16 +26,17 @@ export default function ImportPage() {
             <option value="accounts">Accounts</option>
             <option value="journal">Journal</option>
             <option value="amazon">Amazon orders</option>
+            <option value="walmart">Walmart orders</option>
           </select>
         </label>
         <label className="field">File<input type="file" name="file" accept=".csv,text/csv" /></label>
         <label className="field">Or paste<textarea name="csv" defaultValue={state.csv ?? ""} /></label>
         <button className="btn" type="submit" disabled={pending}>Preview</button>
-        {state.rows.length > 0 && state.kind !== "amazon" && (
+        {state.rows.length > 0 && state.kind !== "amazon" && state.kind !== "walmart" && (
           <button className="btn secondary" type="submit" name="commit" value="yes">Import {state.ready} good rows</button>
         )}
-        {state.kind === "amazon" && state.ready > 0 && (
-          <button className="btn secondary" type="submit" name="commit" value="yes">Import {state.ready} Amazon orders</button>
+        {(state.kind === "amazon" || state.kind === "walmart") && state.ready > 0 && (
+          <button className="btn secondary" type="submit" name="commit" value="yes">Import {state.ready} {state.kind === "walmart" ? "Walmart" : "Amazon"} orders</button>
         )}
       </form>
       {state.rows.length > 0 && (

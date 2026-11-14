@@ -4,6 +4,7 @@ export const QUOTE_LABEL: Record<string, string> = {
   ACCEPTED: "Accepted",
   REJECTED: "Rejected",
   EXPIRED: "Expired",
+  SUPERSEDED: "Replaced by a later revision",
 };
 
 export const ORDER_LABEL: Record<string, string> = {
@@ -37,6 +38,7 @@ export const INVOICE_LABEL: Record<string, string> = {
   OPEN: "Unpaid",
   PARTIAL: "Partly paid",
   PAID: "Paid",
+  VOID: "Void — number kept",
 };
 
 export const CHANNEL_LABEL: Record<string, string> = {

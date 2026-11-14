@@ -145,6 +145,10 @@ export async function commitPeachtree(actor: Actor, csv: string, kind: string): 
 }
 
 export async function commitAmazon(actor: Actor, csv: string): Promise<Result<{ invoices: number }>> {
+  return commitMarketplace(actor, csv, "AMAZON");
+}
+
+export async function commitMarketplace(actor: Actor, csv: string, channel: "AMAZON" | "WALMART"): Promise<Result<{ invoices: number }>> {
   const table = parseCsv(csv);
   const products = await prisma.product.findMany();
   const preview = validateAmazonOrders(
@@ -154,8 +158,8 @@ export async function commitAmazon(actor: Actor, csv: string): Promise<Result<{ 
   if (preview.rows.some((row) => row.status === "error")) {
     return err(preview.rows.find((row) => row.status === "error")?.messages[0] ?? "The Amazon file has a problem.");
   }
-  const amazon = await prisma.party.findFirst({ where: { channel: "AMAZON", isCustomer: true } });
-  if (!amazon) return err("Add a customer with the Amazon channel before importing orders.");
+  const amazon = await prisma.party.findFirst({ where: { channel, isCustomer: true } });
+  if (!amazon) return err(`Add a customer with the ${channel === "WALMART" ? "Walmart" : "Amazon"} channel before importing orders.`);
   let invoices = 0;
   for (const order of preview.ready) {
     const product = products.find((item) => item.sku === order.sku);

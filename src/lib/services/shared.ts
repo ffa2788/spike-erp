@@ -52,16 +52,33 @@ export async function audit(
   });
 }
 
-export async function nextNumber(tx: Tx, name: string): Promise<string> {
+export function formatSequence(name: string, value: number): string {
+  if (name === "invoice-S" || name === "invoice-A" || name === "invoice-W") {
+    const prefix = name.slice(-1);
+    return `${prefix}-${String(value).padStart(6, "0")}`;
+  }
+  if (name === "quote") return `Q-${String(value).padStart(4, "0")}`;
+  const sequence = SEQUENCES.find((item) => item.name === name);
+  return `${sequence?.prefix ?? name}-${value}`;
+}
+
+/** Takes the next number inside the caller's transaction. A rollback puts the number back. A row lock makes two callers wait instead of taking the same number. */
+export async function takeNumber(tx: Tx, name: string): Promise<number> {
   const sequence = SEQUENCES.find((item) => item.name === name);
   if (!sequence) throw new BusinessError(`Unknown number sequence ${name}.`);
-  const existing = await tx.numberSequence.findUnique({ where: { name } });
-  if (!existing) throw new BusinessError("Number sequences are not set up.");
-  const row = await tx.numberSequence.update({
+  await tx.numberSequence.upsert({
     where: { name },
-    data: { next: { increment: 1 } },
+    update: {},
+    create: { name, next: sequence.start },
   });
-  return `${sequence.prefix}-${row.next - 1}`;
+  const rows = await tx.$queryRaw<{ next: number }[]>`
+    UPDATE "NumberSequence" SET next = next + 1 WHERE name = ${name} RETURNING next
+  `;
+  return Number(rows[0].next) - 1;
+}
+
+export async function nextNumber(tx: Tx, name: string): Promise<string> {
+  return formatSequence(name, await takeNumber(tx, name));
 }
 
 export async function postJournal(

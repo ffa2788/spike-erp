@@ -2,14 +2,66 @@ import type { Channel } from "@prisma/client";
 import { addDays, toDateInput } from "../dates";
 import { CODES, inventoryAccount } from "../chart";
 import { fefoAllocate, lotQty, reliefCents, roundQty } from "../inventory";
-import { cogsJournal, salesJournal, shipJournal } from "../journals";
+import { cogsJournal, salesJournal, shipJournal, type DraftLine } from "../journals";
 import { shipBlockReason } from "../nsf";
 import { buyPriceProblem, sellBlockReason } from "../pricing";
 import { err, ok, type Result } from "../result";
 import { computeSalesTax } from "../tax";
+import {
+  applyEarlyPay,
+  dueDays,
+  invoiceSequenceName,
+  nextRevision,
+  priceLines,
+  quoteLabel,
+  resolveUnitPrice,
+  termCharges,
+  type CreditTermName,
+  type DiscountKindName,
+  type IncotermName,
+} from "../commercial";
 import { audit, deny, loadBalances, nextNumber, postJournal, run, type Actor, type Tx } from "./shared";
 
-type LineInput = { productId: string; qty: number; specialPrice: number | null };
+type LineInput = {
+  productId: string;
+  qty: number;
+  specialPrice: number | null;
+  discountKind?: DiscountKindName;
+  discountValue?: number;
+};
+
+type TermsInput = {
+  incoterm?: IncotermName;
+  namedPlace?: string;
+  currency?: string;
+  creditTerm?: CreditTermName;
+  customNetDays?: number;
+  earlyPayBps?: number;
+  earlyPayDays?: number;
+  freightCents?: number;
+  insuranceCents?: number;
+  docDiscountKind?: DiscountKindName;
+  docDiscountValue?: number;
+};
+
+function termsData(input: TermsInput) {
+  const incoterm = input.incoterm ?? "EXW";
+  const charges = termCharges(incoterm);
+  return {
+    incoterm,
+    namedPlace: (input.namedPlace ?? "").trim(),
+    currency: (input.currency ?? "USD").trim().toUpperCase() || "USD",
+    creditTerm: input.creditTerm ?? "NET_30",
+    customNetDays: input.customNetDays ?? 30,
+    earlyPayBps: input.earlyPayBps ?? 0,
+    earlyPayDays: input.earlyPayDays ?? 0,
+    freightCents: charges.sellerFreight ? input.freightCents ?? 0 : 0,
+    insuranceCents: charges.sellerInsurance ? input.insuranceCents ?? 0 : 0,
+    docDiscountKind: input.docDiscountKind ?? "NONE",
+    docDiscountValue: input.docDiscountValue ?? 0,
+    charges,
+  };
+}
 
 async function activeRates(tx: Tx) {
   const rates = await tx.taxRate.findMany({ where: { active: true } });
@@ -35,6 +87,7 @@ export async function saveQuote(
     validUntil: Date;
     notes: string;
     lines: LineInput[];
+    terms?: TermsInput;
     isExample?: boolean;
   },
 ): Promise<Result<{ id: string }>> {
@@ -53,6 +106,7 @@ async function saveQuoteTx(
     validUntil: Date;
     notes: string;
     lines: LineInput[];
+    terms?: TermsInput;
     isExample?: boolean;
   },
 ): Promise<Result<{ id: string }>> {
@@ -65,7 +119,19 @@ async function saveQuoteTx(
     if (!existing) return err("That quote was not found.");
     if (existing.status === "ACCEPTED") return err("This quote was already accepted. Change the order instead.");
   }
-  const priced: { productId: string; description: string; qty: number; unitPriceCents: number; taxable: boolean }[] = [];
+  const terms = termsData(input.terms ?? {});
+  if (!terms.namedPlace) return err("Enter the named place for the shipping term, such as Clearwater plant.");
+  if (terms.freightCents < 0 || terms.insuranceCents < 0) return err("Freight and insurance cannot be negative.");
+  const priced: {
+    productId: string;
+    description: string;
+    qty: number;
+    unitPriceCents: number;
+    taxable: boolean;
+    discountKind: DiscountKindName;
+    discountValue: number;
+    priceSource: string;
+  }[] = [];
   for (const line of lines) {
     const product = await tx.product.findUnique({ where: { id: line.productId } });
     if (!product) return err("One of the products was not found.");
@@ -76,28 +142,87 @@ async function saveQuoteTx(
       listPrice: product.listPrice == null ? null : Number(product.listPrice),
     });
     if (block) return err(`${product.name}: ${block}`);
-    const price = line.specialPrice ?? Number(product.listPrice);
-    const priceProblem = buyPriceProblem(price, product.allowOneDollar);
+    const listCents = Math.round(Number(product.listPrice) * 100);
+    const breaks = await tx.priceBreak.findMany({ where: { productId: product.id, priceLevel: party.priceLevel } });
+    const level = breaks.find((row) => Number(row.minQty) === 0);
+    const resolved = line.specialPrice == null
+      ? resolveUnitPrice({
+          qty: line.qty,
+          listCents,
+          levelCents: level ? level.unitPriceCents : party.priceLevel === "LIST" ? null : null,
+          breaks: breaks.filter((row) => Number(row.minQty) > 0).map((row) => ({ minQty: Number(row.minQty), unitPriceCents: row.unitPriceCents })),
+        })
+      : { unitPriceCents: Math.round(line.specialPrice * 100), source: "Special price" };
+    const priceProblem = buyPriceProblem(resolved.unitPriceCents / 100, product.allowOneDollar);
     if (priceProblem) return err(`${product.name}: ${priceProblem}`);
     priced.push({
       productId: product.id,
       description: product.name,
       qty: line.qty,
-      unitPriceCents: Math.round(price * 100),
+      unitPriceCents: resolved.unitPriceCents,
       taxable: product.taxable,
+      discountKind: line.discountKind ?? "NONE",
+      discountValue: line.discountValue ?? 0,
+      priceSource: line.specialPrice == null ? resolved.source : "Special price",
     });
   }
-  const subtotalCents = priced.reduce((sum, line) => sum + lineAmount(line.qty, line.unitPriceCents), 0);
+  const goods = priceLines({
+    lines: priced.map((line) => ({
+      qty: line.qty,
+      unitPriceCents: line.unitPriceCents,
+      taxable: line.taxable,
+      discountKind: line.discountKind,
+      discountValue: line.discountValue,
+    })),
+    docKind: terms.docDiscountKind,
+    docValue: terms.docDiscountValue,
+  });
+  if ("error" in goods) return err(goods.error);
+  const taxLines = goods.lines.map((line) => ({ amountCents: line.afterDocCents, taxable: line.taxable }));
+  if (terms.freightCents + terms.insuranceCents > 0 && goods.lines.some((line) => line.taxable)) {
+    taxLines.push({ amountCents: terms.freightCents + terms.insuranceCents, taxable: true });
+  }
   const tax = computeSalesTax({
     shipState: party.shipState || party.billState,
     taxLocality: party.taxLocality,
     rates: await activeRates(tx),
-    lines: priced.map((line) => ({ amountCents: lineAmount(line.qty, line.unitPriceCents), taxable: line.taxable })),
+    lines: taxLines,
     exempt: party.taxExempt,
     exemptionExpires: party.exemptionExpires ? toDateInput(party.exemptionExpires) : null,
     exemptionState: party.exemptionState,
     asOf: toDateInput(input.issuedOn),
   });
+  const subtotalCents = goods.goodsNetCents + terms.freightCents + terms.insuranceCents;
+  const totalCents = subtotalCents + tax.taxCents;
+  const commercial = {
+    incoterm: terms.incoterm,
+    namedPlace: terms.namedPlace,
+    currency: terms.currency,
+    creditTerm: terms.creditTerm,
+    customNetDays: terms.customNetDays,
+    earlyPayBps: terms.earlyPayBps,
+    earlyPayDays: terms.earlyPayDays,
+    freightCents: terms.freightCents,
+    insuranceCents: terms.insuranceCents,
+    docDiscountKind: terms.docDiscountKind,
+    docDiscountValue: terms.docDiscountValue,
+    discountCents: goods.lineDiscountCents + goods.docDiscountCents,
+    goodsNetCents: goods.goodsNetCents,
+    subtotalCents,
+    taxCents: tax.taxCents,
+    totalCents,
+  };
+  const lineData = priced.map((line, index) => ({
+    productId: line.productId,
+    description: line.description,
+    qty: line.qty,
+    unitPriceCents: line.unitPriceCents,
+    discountKind: line.discountKind,
+    discountValue: line.discountValue,
+    discountCents: goods.lines[index].lineDiscountCents + goods.lines[index].docShareCents,
+    priceSource: line.priceSource,
+    sort: index,
+  }));
   const saved = input.id
     ? await tx.quote.update({
         where: { id: input.id },
@@ -112,24 +237,14 @@ async function saveQuoteTx(
           shipState: party.shipState || party.billState,
           shipZip: party.shipZip,
           taxLocality: party.taxLocality,
-          subtotalCents,
-          taxCents: tax.taxCents,
-          totalCents: subtotalCents + tax.taxCents,
-          lines: {
-            deleteMany: {},
-            create: priced.map((line, index) => ({
-              productId: line.productId,
-              description: line.description,
-              qty: line.qty,
-              unitPriceCents: line.unitPriceCents,
-              sort: index,
-            })),
-          },
+          ...commercial,
+          lines: { deleteMany: {}, create: lineData },
         },
       })
     : await tx.quote.create({
         data: {
           number: await nextNumber(tx, "quote"),
+          revision: "A",
           partyId: party.id,
           issuedOn: input.issuedOn,
           validUntil: input.validUntil,
@@ -140,21 +255,11 @@ async function saveQuoteTx(
           shipState: party.shipState || party.billState,
           shipZip: party.shipZip,
           taxLocality: party.taxLocality,
-          subtotalCents,
-          taxCents: tax.taxCents,
-          totalCents: subtotalCents + tax.taxCents,
-          lines: {
-            create: priced.map((line, index) => ({
-              productId: line.productId,
-              description: line.description,
-              qty: line.qty,
-              unitPriceCents: line.unitPriceCents,
-              sort: index,
-            })),
-          },
+          ...commercial,
+          lines: { create: lineData },
         },
       });
-  await audit(tx, actor, input.id ? "update" : "create", "Quote", saved.id, `Saved quote ${saved.number} for ${party.name}.`);
+  await audit(tx, actor, input.id ? "update" : "create", "Quote", saved.id, `Saved ${quoteLabel(saved.number, saved.revision)} for ${party.name}.`);
   return ok({ id: saved.id });
 }
 
@@ -185,7 +290,9 @@ export async function acceptQuote(actor: Actor, quoteId: string): Promise<Result
     });
     if (!quote) return err("That quote was not found.");
     if (quote.order) return err("This quote already has an order.");
-    if (quote.status === "REJECTED" || quote.status === "EXPIRED") return err("This quote is closed.");
+    if (quote.status === "REJECTED" || quote.status === "EXPIRED" || quote.status === "SUPERSEDED") {
+      return err("This quote revision is closed. Open the latest revision.");
+    }
     if (quote.validUntil < quote.issuedOn) return err("The valid-until date is before the quote date.");
     const open = await tx.invoice.aggregate({
       where: { partyId: quote.partyId, status: { in: ["OPEN", "PARTIAL"] } },
@@ -207,6 +314,19 @@ export async function acceptQuote(actor: Actor, quoteId: string): Promise<Result
         shipZip: quote.shipZip,
         taxLocality: quote.taxLocality,
         notes: quote.notes,
+        incoterm: quote.incoterm,
+        namedPlace: quote.namedPlace,
+        currency: quote.currency,
+        creditTerm: quote.creditTerm,
+        customNetDays: quote.customNetDays,
+        earlyPayBps: quote.earlyPayBps,
+        earlyPayDays: quote.earlyPayDays,
+        freightCents: quote.freightCents,
+        insuranceCents: quote.insuranceCents,
+        docDiscountKind: quote.docDiscountKind,
+        docDiscountValue: quote.docDiscountValue,
+        discountCents: quote.discountCents,
+        goodsNetCents: quote.goodsNetCents,
         isExample: quote.isExample,
         lines: {
           create: quote.lines.map((line) => ({
@@ -214,13 +334,16 @@ export async function acceptQuote(actor: Actor, quoteId: string): Promise<Result
             description: line.description,
             qty: line.qty,
             unitPriceCents: line.unitPriceCents,
+            discountKind: line.discountKind,
+            discountValue: line.discountValue,
+            discountCents: line.discountCents,
             sort: line.sort,
           })),
         },
       },
     });
     await tx.quote.update({ where: { id: quote.id }, data: { status: "ACCEPTED" } });
-    await audit(tx, actor, "accept", "Quote", quote.id, `Accepted ${quote.number} and created order ${order.number}.`);
+    await audit(tx, actor, "accept", "Quote", quote.id, `Accepted ${quoteLabel(quote.number, quote.revision)} and created order ${order.number}.`);
     return ok({ orderId: order.id });
   });
 }
@@ -400,47 +523,76 @@ export async function invoiceDeliveryTx(
     row.cogsCents += line.cogsCents;
     grouped.set(line.orderLineId, row);
   }
+  const orderGoods = delivery.order.lines.reduce((sum, line) => sum + lineAmount(Number(line.qty), line.unitPriceCents), 0);
   const invoiceLines = [...grouped.entries()].map(([orderLineId, row]) => {
     const orderLine = delivery.order.lines.find((line) => line.id === orderLineId)!;
+    const full = lineAmount(Number(orderLine.qty), orderLine.unitPriceCents);
+    const shipped = lineAmount(row.qty, orderLine.unitPriceCents);
+    const ratio = full > 0 ? shipped / full : 1;
+    const discountValue = orderLine.discountKind === "AMOUNT" ? Math.round(orderLine.discountValue * ratio) : orderLine.discountValue;
     return {
       productId: orderLine.productId,
       description: orderLine.description,
       qty: row.qty,
       unitPriceCents: orderLine.unitPriceCents,
       taxable: orderLine.product.taxable,
+      discountKind: orderLine.discountKind,
+      discountValue,
       cogsCents: row.cogsCents,
-      amountCents: lineAmount(row.qty, orderLine.unitPriceCents),
     };
   });
-  const subtotalCents = invoiceLines.reduce((sum, line) => sum + line.amountCents, 0);
-  const channel = party.channel;
-  const tax =
-    channel === "AMAZON"
-      ? { taxableCents: 0, taxCents: 0, exemptionApplied: false, exemptionNumber: "", breakdown: [] as { name: string; rateBps: number; taxCents: number }[] }
-      : computeSalesTax({
-          shipState: delivery.order.shipState,
-          taxLocality: delivery.order.taxLocality,
-          rates: await activeRates(tx),
-          lines: invoiceLines.map((line) => ({ amountCents: line.amountCents, taxable: line.taxable })),
-          exempt: party.taxExempt,
-          exemptionExpires: party.exemptionExpires ? toDateInput(party.exemptionExpires) : null,
-          exemptionState: party.exemptionState,
-          asOf: toDateInput(issuedOn),
-        });
-  const taxCents = tax.taxCents;
-  const totalCents = subtotalCents + taxCents;
+  const shippedGross = invoiceLines.reduce((sum, line) => sum + lineAmount(line.qty, line.unitPriceCents), 0);
+  const docValue = delivery.order.docDiscountKind === "AMOUNT" && orderGoods > 0
+    ? Math.round(delivery.order.docDiscountValue * (shippedGross / orderGoods))
+    : delivery.order.docDiscountValue;
+  const goods = priceLines({
+    lines: invoiceLines.map((line) => ({
+      qty: line.qty,
+      unitPriceCents: line.unitPriceCents,
+      taxable: line.taxable,
+      discountKind: line.discountKind,
+      discountValue: line.discountValue,
+    })),
+    docKind: delivery.order.docDiscountKind,
+    docValue,
+  });
+  if ("error" in goods) return err(goods.error);
+  const freightShare = orderGoods > 0 ? Math.round(delivery.order.freightCents * (shippedGross / orderGoods)) : delivery.order.freightCents;
+  const insuranceShare = orderGoods > 0 ? Math.round(delivery.order.insuranceCents * (shippedGross / orderGoods)) : delivery.order.insuranceCents;
+  const channel = party.channel === "AMAZON" || party.channel === "WALMART" ? party.channel : delivery.order.party.channel;
+  const marketplace = channel === "AMAZON" || channel === "WALMART";
+  const taxLines = goods.lines.map((line) => ({ amountCents: line.afterDocCents, taxable: line.taxable }));
+  if (!marketplace && freightShare + insuranceShare > 0 && goods.lines.some((line) => line.taxable)) {
+    taxLines.push({ amountCents: freightShare + insuranceShare, taxable: true });
+  }
+  const tax = marketplace
+    ? { taxableCents: 0, taxCents: 0, exemptionApplied: false, exemptionNumber: "", breakdown: [] as { name: string; rateBps: number; taxCents: number }[] }
+    : computeSalesTax({
+        shipState: delivery.order.shipState,
+        taxLocality: delivery.order.taxLocality,
+        rates: await activeRates(tx),
+        lines: taxLines,
+        exempt: party.taxExempt,
+        exemptionExpires: party.exemptionExpires ? toDateInput(party.exemptionExpires) : null,
+        exemptionState: party.exemptionState,
+        asOf: toDateInput(issuedOn),
+      });
+  const goodsNetCents = goods.goodsNetCents;
+  const discountCents = goods.lineDiscountCents + goods.docDiscountCents;
+  const subtotalCents = goodsNetCents + freightShare + insuranceShare;
+  const totalCents = subtotalCents + tax.taxCents;
   if (feeCents < 0 || feeCents > totalCents) return err("Fees cannot be negative or larger than the invoice.");
   const cogsCents = invoiceLines.reduce((sum, line) => sum + line.cogsCents, 0);
   const invoice = await tx.invoice.create({
     data: {
-      number: await nextNumber(tx, "invoice"),
+      number: await nextNumber(tx, invoiceSequenceName(channel)),
       partyId: party.id,
       orderId: delivery.orderId,
       deliveryId: delivery.id,
       issuedOn,
-      dueOn: addDays(issuedOn, party.paymentTermsDays),
+      dueOn: addDays(issuedOn, dueDays(delivery.order.creditTerm, delivery.order.customNetDays)),
       subtotalCents,
-      taxCents,
+      taxCents: tax.taxCents,
       totalCents,
       balanceCents: totalCents - feeCents,
       feeCents,
@@ -449,15 +601,36 @@ export async function invoiceDeliveryTx(
       exemptionApplied: tax.exemptionApplied,
       exemptionNumber: tax.exemptionApplied ? party.exemptionNumber : "",
       channel,
-      notes: channel === "AMAZON" ? "Amazon marketplace. SPIKE did not add sales tax." : "",
+      marketplaceOrderId: marketplace ? delivery.order.customerPo : "",
+      incoterm: delivery.order.incoterm,
+      namedPlace: delivery.order.namedPlace,
+      currency: delivery.order.currency,
+      creditTerm: delivery.order.creditTerm,
+      customNetDays: delivery.order.customNetDays,
+      earlyPayBps: delivery.order.earlyPayBps,
+      earlyPayDays: delivery.order.earlyPayDays,
+      freightCents: freightShare,
+      insuranceCents: insuranceShare,
+      docDiscountKind: delivery.order.docDiscountKind,
+      docDiscountValue: docValue,
+      discountCents,
+      goodsNetCents,
+      notes: channel === "AMAZON"
+        ? `Amazon order ${delivery.order.customerPo}. SPIKE did not add sales tax.`
+        : channel === "WALMART"
+          ? `Walmart order ${delivery.order.customerPo}. SPIKE did not add sales tax.`
+          : "",
       isExample: delivery.isExample,
       lines: {
-        create: invoiceLines.map((line) => ({
+        create: invoiceLines.map((line, index) => ({
           productId: line.productId,
           description: line.description,
           qty: line.qty,
           unitPriceCents: line.unitPriceCents,
           taxable: line.taxable,
+          discountKind: line.discountKind,
+          discountValue: line.discountValue,
+          discountCents: goods.lines[index].lineDiscountCents + goods.lines[index].docShareCents,
           cogsCents: line.cogsCents,
         })),
       },
@@ -468,7 +641,7 @@ export async function invoiceDeliveryTx(
     memo: `Invoice ${invoice.number}`,
     source: "INVOICE",
     sourceId: invoice.id,
-    lines: salesJournal({ subtotalCents, taxCents, totalCents, feeCents }),
+    lines: salesJournal({ subtotalCents, taxCents: tax.taxCents, totalCents, feeCents, discountCents }),
     isExample: delivery.isExample,
   });
   if (!sales.ok) return sales;
@@ -503,8 +676,18 @@ export async function payInvoice(
     const invoice = await tx.invoice.findUnique({ where: { id: input.invoiceId }, include: { party: true } });
     if (!invoice) return err("That invoice was not found.");
     if (!input.method.trim() || !input.reference.trim()) return err("Enter how they paid and a reference, such as a check number.");
+    if (invoice.status === "VOID") return err("This invoice was voided. Its number stays on file and cannot be paid.");
     if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) return err("Enter a payment greater than zero.");
     if (input.amountCents > invoice.balanceCents) return err("That payment is more than the open balance.");
+    const settlement = applyEarlyPay({
+      goodsNetCents: invoice.goodsNetCents,
+      earlyPayBps: invoice.earlyPayBps,
+      earlyPayDays: invoice.earlyPayDays,
+      issuedOn: toDateInput(invoice.issuedOn),
+      paidOn: toDateInput(input.paidOn),
+      balanceCents: invoice.balanceCents,
+      cashCents: input.amountCents,
+    });
     const payment = await tx.customerPayment.create({
       data: {
         number: await nextNumber(tx, "receipt-pay"),
@@ -513,24 +696,39 @@ export async function payInvoice(
         amountCents: input.amountCents,
         method: input.method.trim(),
         reference: input.reference.trim(),
+        notes: settlement.message,
         isExample: invoice.isExample,
-        applications: { create: { invoiceId: invoice.id, amountCents: input.amountCents } },
+        applications: {
+          create: { invoiceId: invoice.id, amountCents: input.amountCents, discountCents: settlement.discountCents },
+        },
       },
     });
-    const balance = invoice.balanceCents - input.amountCents;
     await tx.invoice.update({
       where: { id: invoice.id },
-      data: { balanceCents: balance, status: balance === 0 ? "PAID" : "PARTIAL" },
+      data: {
+        balanceCents: settlement.openCents,
+        earlyTakenCents: invoice.earlyTakenCents + settlement.discountCents,
+        status: settlement.openCents === 0 ? "PAID" : "PARTIAL",
+      },
     });
+    const journalLines: DraftLine[] = [
+      { accountCode: CODES.cash, debitCents: input.amountCents, creditCents: 0, memo: "Customer payment" },
+      { accountCode: CODES.ar, debitCents: 0, creditCents: settlement.arReliefCents, memo: `Payment on ${invoice.number}` },
+    ];
+    if (settlement.discountCents > 0) {
+      journalLines.push({
+        accountCode: CODES.salesDiscount,
+        debitCents: settlement.discountCents,
+        creditCents: 0,
+        memo: "Early-payment discount",
+      });
+    }
     const journal = await postJournal(tx, actor, {
       date: input.paidOn,
       memo: `Payment ${payment.number} on ${invoice.number}`,
       source: "CUSTOMER_PAYMENT",
       sourceId: payment.id,
-      lines: [
-        { accountCode: CODES.cash, debitCents: input.amountCents, creditCents: 0, memo: "Customer payment" },
-        { accountCode: CODES.ar, debitCents: 0, creditCents: input.amountCents, memo: "Customer payment" },
-      ],
+      lines: journalLines,
       isExample: invoice.isExample,
     });
     if (!journal.ok) return journal;
@@ -613,6 +811,12 @@ export async function createAmazonSale(
   return run(async (tx) => {
     const product = await tx.product.findUnique({ where: { id: input.productId } });
     if (!product) return err("That product was not found.");
+    const party = await tx.party.findUnique({ where: { id: input.partyId } });
+    if (!party) return err("That customer was not found.");
+    const existing = await tx.invoice.findFirst({
+      where: { channel: party.channel, marketplaceOrderId: input.orderId, status: { not: "VOID" } },
+    });
+    if (existing) return err(`Marketplace order ${input.orderId} is already invoice ${existing.number}.`);
     const unit = Math.round(input.itemPriceCents / input.qty);
     if (Math.round(input.qty * unit) !== input.itemPriceCents) {
       return err(`Amazon order ${input.orderId}: the item price does not divide into a whole-cent unit price.`);
@@ -623,7 +827,7 @@ export async function createAmazonSale(
         partyId: input.partyId,
         orderedOn: input.date,
         customerPo: input.orderId,
-        notes: "Imported from an Amazon file. SPIKE does not connect to Amazon.",
+        notes: party.channel === "WALMART" ? "Walmart order." : "Amazon order.",
         lines: {
           create: [{
             productId: product.id,
@@ -647,5 +851,103 @@ export async function createAmazonSale(
     const invoiced = await invoiceDeliveryTx(tx, actor, shipped.value.deliveryId, input.date, input.feeCents);
     if (!invoiced.ok) return err(`Amazon order ${input.orderId}: ${invoiced.error}`);
     return invoiced;
+  });
+}
+
+export async function reviseQuote(actor: Actor, quoteId: string): Promise<Result<{ id: string }>> {
+  const denied = deny(actor, "sell");
+  if (denied) return denied;
+  return run(async (tx) => {
+    const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { lines: true } });
+    if (!quote) return err("That quote was not found.");
+    if (quote.status === "ACCEPTED") return err("This revision was accepted. Change the order instead.");
+    if (quote.status === "SUPERSEDED") return err("Open the latest revision.");
+    const revision = nextRevision(quote.revision);
+    if (!revision) return err("This quote has used every revision letter.");
+    const created = await tx.quote.create({
+      data: {
+        number: quote.number,
+        revision,
+        partyId: quote.partyId,
+        issuedOn: quote.issuedOn,
+        validUntil: quote.validUntil,
+        shipStreet: quote.shipStreet,
+        shipCity: quote.shipCity,
+        shipState: quote.shipState,
+        shipZip: quote.shipZip,
+        taxLocality: quote.taxLocality,
+        notes: quote.notes,
+        incoterm: quote.incoterm,
+        namedPlace: quote.namedPlace,
+        currency: quote.currency,
+        creditTerm: quote.creditTerm,
+        customNetDays: quote.customNetDays,
+        earlyPayBps: quote.earlyPayBps,
+        earlyPayDays: quote.earlyPayDays,
+        freightCents: quote.freightCents,
+        insuranceCents: quote.insuranceCents,
+        docDiscountKind: quote.docDiscountKind,
+        docDiscountValue: quote.docDiscountValue,
+        discountCents: quote.discountCents,
+        goodsNetCents: quote.goodsNetCents,
+        subtotalCents: quote.subtotalCents,
+        taxCents: quote.taxCents,
+        totalCents: quote.totalCents,
+        isExample: quote.isExample,
+        lines: {
+          create: quote.lines.map((line) => ({
+            productId: line.productId,
+            description: line.description,
+            qty: line.qty,
+            unitPriceCents: line.unitPriceCents,
+            discountKind: line.discountKind,
+            discountValue: line.discountValue,
+            discountCents: line.discountCents,
+            priceSource: line.priceSource,
+            sort: line.sort,
+          })),
+        },
+      },
+    });
+    await tx.quote.update({ where: { id: quote.id }, data: { status: "SUPERSEDED" } });
+    await audit(tx, actor, "revise", "Quote", created.id, `Created ${quoteLabel(created.number, created.revision)}.`);
+    return ok({ id: created.id });
+  });
+}
+
+export async function voidInvoice(actor: Actor, invoiceId: string): Promise<Result<{ id: string }>> {
+  const denied = deny(actor, "sell");
+  if (denied) return denied;
+  return run(async (tx) => {
+    const invoice = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { applications: true } });
+    if (!invoice) return err("That invoice was not found.");
+    if (invoice.status === "VOID") return err(`${invoice.number} is already void. The number is not reused.`);
+    if (invoice.applications.length > 0) return err("Take the payment off before voiding this invoice.");
+    const reverse = async (journalId: string | null, memo: string) => {
+      if (!journalId) return null;
+      const lines = await tx.journalLine.findMany({ where: { entryId: journalId }, include: { account: true } });
+      const posted = await postJournal(tx, actor, {
+        date: new Date(),
+        memo,
+        source: "VOID",
+        sourceId: invoice.id,
+        lines: lines.map((line) => ({
+          accountCode: line.account.code,
+          debitCents: line.creditCents,
+          creditCents: line.debitCents,
+          memo: `Void ${invoice.number}`,
+        })),
+        isExample: invoice.isExample,
+      });
+      if (!posted.ok) return posted.error;
+      return null;
+    };
+    const salesError = await reverse(invoice.salesJournalId, `Void ${invoice.number}`);
+    if (salesError) return err(salesError);
+    const cogsError = await reverse(invoice.cogsJournalId, `Void cost of ${invoice.number}`);
+    if (cogsError) return err(cogsError);
+    await tx.invoice.update({ where: { id: invoice.id }, data: { status: "VOID", balanceCents: 0 } });
+    await audit(tx, actor, "void", "Invoice", invoice.id, `Voided ${invoice.number}. The number stays on file.`);
+    return ok({ id: invoice.id });
   });
 }

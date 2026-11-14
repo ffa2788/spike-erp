@@ -8,6 +8,7 @@ import { AGING_LABEL, summarizeAging } from "@/lib/aging";
 import { lotQty, valueCents } from "@/lib/inventory";
 import { balanceSheet, profitAndLoss } from "@/lib/journals";
 import { assessBooks, currentStock, postedLines } from "@/lib/read-models";
+import { channelPrefix } from "@/lib/commercial";
 import { buildSalesReport } from "@/lib/sales-report";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function ReportPage({
   const query = await searchParams;
   const from = typeof query.from === "string" && query.from ? query.from : `${todayInput().slice(0, 4)}-01-01`;
   const to = typeof query.to === "string" && query.to ? query.to : todayInput();
+  const channel = typeof query.channel === "string" ? query.channel : "ALL";
   const titles: Record<string, string> = {
     sales: "Sales",
     margins: "Margins",
@@ -44,10 +46,20 @@ export default async function ReportPage({
         <form className="row no-print">
           <label className="field">From<input type="date" name="from" defaultValue={from} /></label>
           <label className="field">To<input type="date" name="to" defaultValue={to} /></label>
+          {(slug === "sales" || slug === "margins") && (
+            <label className="field">Channel
+              <select name="channel" defaultValue={channel}>
+                <option value="ALL">All channels</option>
+                <option value="S">S — direct SPER</option>
+                <option value="A">A — Amazon</option>
+                <option value="W">W — Walmart</option>
+              </select>
+            </label>
+          )}
           <button className="btn secondary" type="submit">Update</button>
         </form>
       )}
-      {slug === "sales" || slug === "margins" ? <SalesBlock from={from} to={to} margins={slug === "margins"} /> : null}
+      {slug === "sales" || slug === "margins" ? <SalesBlock from={from} to={to} margins={slug === "margins"} channel={channel} /> : null}
       {slug === "inventory" ? <InventoryBlock /> : null}
       {slug === "ar" ? <AgingBlock kind="ar" /> : null}
       {slug === "ap" ? <AgingBlock kind="ap" /> : null}
@@ -57,12 +69,13 @@ export default async function ReportPage({
   );
 }
 
-async function SalesBlock({ from, to, margins }: { from: string; to: string; margins: boolean }) {
+async function SalesBlock({ from, to, margins, channel }: { from: string; to: string; margins: boolean; channel: string }) {
   const invoices = await prisma.invoice.findMany({
-    where: { issuedOn: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T23:59:59Z`) } },
+    where: { issuedOn: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T23:59:59Z`) }, status: { not: "VOID" } },
     include: { party: true, lines: true },
   });
-  const report = buildSalesReport(invoices.map((invoice) => ({
+  const filtered = channel === "ALL" ? invoices : invoices.filter((invoice) => channelPrefix(invoice.channel) === channel);
+  const report = buildSalesReport(filtered.map((invoice) => ({
     id: invoice.id,
     number: invoice.number,
     issuedOn: from,

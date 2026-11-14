@@ -73,6 +73,7 @@ enum QuoteStatus {
   ACCEPTED
   REJECTED
   EXPIRED
+  SUPERSEDED
 }
 
 enum OrderStatus {
@@ -86,6 +87,7 @@ enum InvoiceStatus {
   OPEN
   PARTIAL
   PAID
+  VOID
 }
 
 enum PoStatus {
@@ -113,6 +115,36 @@ enum Channel {
   DISTRIBUTOR
   MUNICIPAL
   AMAZON
+  WALMART
+}
+
+enum Incoterm {
+  EXW
+  FCA
+  FOB
+  CFR
+  CIF
+  CPT
+  CIP
+  DAP
+  DPU
+  DDP
+}
+
+enum CreditTerm {
+  PREPAID
+  COD
+  NET_15
+  NET_30
+  NET_45
+  NET_60
+  CUSTOM
+}
+
+enum DiscountKind {
+  NONE
+  PERCENT
+  AMOUNT
 }
 
 enum AccountType {
@@ -194,6 +226,7 @@ model Party {
   taxLocality      String    @default("")
   paymentTermsDays Int       @default(30)
   creditLimitCents Int       @default(0)
+  priceLevel       String    @default("LIST")
   taxExempt        Boolean   @default(false)
   exemptionNumber  String    @default("")
   exemptionState   String    @default("")
@@ -270,6 +303,7 @@ model Product {
   lastPurchasePrice Decimal?    @db.Decimal(18, 4)
 
   formulas         Formula[]
+  priceBreaks      PriceBreak[]
   formulaLines     FormulaLine[]
   specs            QualitySpec[]
   lots             Lot[]
@@ -394,6 +428,17 @@ model NumberSequence {
   next Int
 }
 
+model PriceBreak {
+  id             String  @id @default(cuid())
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceLevel     String
+  minQty         Decimal @db.Decimal(18, 4)
+  unitPriceCents Int
+
+  @@unique([productId, priceLevel, minQty])
+}
+
 model TaxRate {
   id        String  @id @default(cuid())
   state     String
@@ -405,27 +450,43 @@ model TaxRate {
 }
 
 model Quote {
-  id            String      @id @default(cuid())
-  number        String      @unique
-  partyId       String
-  party         Party       @relation(fields: [partyId], references: [id])
-  status        QuoteStatus @default(DRAFT)
-  issuedOn      DateTime
-  validUntil    DateTime
-  shipStreet    String      @default("")
-  shipCity      String      @default("")
-  shipState     String      @default("")
-  shipZip       String      @default("")
-  taxLocality   String      @default("")
-  notes         String      @default("")
-  subtotalCents Int         @default(0)
-  taxCents      Int         @default(0)
-  totalCents    Int         @default(0)
-  isExample     Boolean     @default(false)
-  createdAt     DateTime    @default(now())
+  id              String       @id @default(cuid())
+  number          String
+  revision        String       @default("A")
+  partyId         String
+  party           Party        @relation(fields: [partyId], references: [id])
+  status          QuoteStatus  @default(DRAFT)
+  issuedOn        DateTime
+  validUntil      DateTime
+  shipStreet      String       @default("")
+  shipCity        String       @default("")
+  shipState       String       @default("")
+  shipZip         String       @default("")
+  taxLocality     String       @default("")
+  notes           String       @default("")
+  incoterm        Incoterm     @default(EXW)
+  namedPlace      String       @default("")
+  currency        String       @default("USD")
+  creditTerm      CreditTerm   @default(NET_30)
+  customNetDays   Int          @default(30)
+  earlyPayBps     Int          @default(0)
+  earlyPayDays    Int          @default(0)
+  freightCents    Int          @default(0)
+  insuranceCents  Int          @default(0)
+  docDiscountKind DiscountKind @default(NONE)
+  docDiscountValue Int         @default(0)
+  discountCents   Int          @default(0)
+  goodsNetCents   Int          @default(0)
+  subtotalCents   Int          @default(0)
+  taxCents        Int          @default(0)
+  totalCents      Int          @default(0)
+  isExample       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
 
   lines QuoteLine[]
   order SalesOrder?
+
+  @@unique([number, revision])
 }
 
 model QuoteLine {
@@ -435,8 +496,12 @@ model QuoteLine {
   productId      String
   product        Product @relation(fields: [productId], references: [id])
   description    String
-  qty            Decimal @db.Decimal(18, 4)
+  qty            Decimal      @db.Decimal(18, 4)
   unitPriceCents Int
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
+  priceSource    String       @default("")
   sort           Int
 }
 
@@ -453,10 +518,23 @@ model SalesOrder {
   shipCity    String      @default("")
   shipState   String      @default("")
   shipZip     String      @default("")
-  taxLocality String      @default("")
-  customerPo  String      @default("")
-  notes       String      @default("")
-  isExample   Boolean     @default(false)
+  taxLocality      String       @default("")
+  customerPo       String       @default("")
+  notes            String       @default("")
+  incoterm         Incoterm     @default(EXW)
+  namedPlace       String       @default("")
+  currency         String       @default("USD")
+  creditTerm       CreditTerm   @default(NET_30)
+  customNetDays    Int          @default(30)
+  earlyPayBps      Int          @default(0)
+  earlyPayDays     Int          @default(0)
+  freightCents     Int          @default(0)
+  insuranceCents   Int          @default(0)
+  docDiscountKind  DiscountKind @default(NONE)
+  docDiscountValue Int          @default(0)
+  discountCents    Int          @default(0)
+  goodsNetCents    Int          @default(0)
+  isExample        Boolean      @default(false)
 
   lines      SalesOrderLine[]
   deliveries Delivery[]
@@ -470,8 +548,11 @@ model SalesOrderLine {
   productId      String
   product        Product    @relation(fields: [productId], references: [id])
   description    String
-  qty            Decimal    @db.Decimal(18, 4)
+  qty            Decimal      @db.Decimal(18, 4)
   unitPriceCents Int
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
   sort           Int
 
   deliveryLines DeliveryLine[]
@@ -526,8 +607,23 @@ model Invoice {
   taxJson          Json?
   exemptionApplied Boolean       @default(false)
   exemptionNumber  String        @default("")
-  channel          Channel       @default(DIRECT)
-  salesJournalId   String?
+  channel            Channel       @default(DIRECT)
+  marketplaceOrderId String        @default("")
+  incoterm           Incoterm      @default(EXW)
+  namedPlace         String        @default("")
+  currency           String        @default("USD")
+  creditTerm         CreditTerm    @default(NET_30)
+  customNetDays      Int           @default(30)
+  earlyPayBps        Int           @default(0)
+  earlyPayDays       Int           @default(0)
+  freightCents       Int           @default(0)
+  insuranceCents     Int           @default(0)
+  docDiscountKind    DiscountKind  @default(NONE)
+  docDiscountValue   Int           @default(0)
+  discountCents      Int           @default(0)
+  goodsNetCents      Int           @default(0)
+  earlyTakenCents    Int           @default(0)
+  salesJournalId     String?
   cogsJournalId    String?
   notes            String        @default("")
   isExample        Boolean       @default(false)
@@ -542,10 +638,13 @@ model InvoiceLine {
   invoice        Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId      String
   description    String
-  qty            Decimal @db.Decimal(18, 4)
+  qty            Decimal      @db.Decimal(18, 4)
   unitPriceCents Int
-  taxable        Boolean @default(true)
-  cogsCents      Int     @default(0)
+  taxable        Boolean      @default(true)
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
+  cogsCents      Int          @default(0)
 }
 
 model CustomerPayment {
@@ -568,9 +667,10 @@ model PaymentApplication {
   id          String          @id @default(cuid())
   paymentId   String
   payment     CustomerPayment @relation(fields: [paymentId], references: [id])
-  invoiceId   String
-  invoice     Invoice         @relation(fields: [invoiceId], references: [id])
-  amountCents Int
+  invoiceId     String
+  invoice       Invoice         @relation(fields: [invoiceId], references: [id])
+  amountCents   Int
+  discountCents Int             @default(0)
 }
 
 model PurchaseOrder {

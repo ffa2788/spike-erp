@@ -21,6 +21,7 @@ SPIKE is original software. Other chemical and apparel systems were used only as
 - Peachtree 2011 CSV import with a preview that skips bad rows
 - Sign-in with a password and an authenticator code, four roles, and a change history
 - Tax Center: Florida DR-15 worksheet, 1099 totals with W-9 tracking, a year-end package mapped to Form 1120 or 1120-S, and plain-English savings ideas that cite the code section and tell you to confirm them with your CPA
+- Quotes carry Incoterms, payment terms, and discounts onto the order and the invoice. Direct invoices are S-, Amazon invoices are A-, and Walmart invoices are W-. A void keeps its number
 
 Amazon uses the Selling Partner API when credentials are set, and a CSV import when they are not. Technical data sheets and 16-section safety data sheets are drafts until a qualified person publishes them. There is no toll-manufacturing module, no credit note, and no outbound email.
 

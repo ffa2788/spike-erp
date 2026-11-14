@@ -13,6 +13,7 @@ export const CODES = {
   equity: "3000",
   obe: "3900",
   sales: "4000",
+  salesDiscount: "4100",
   otherIncome: "4200",
   cogs: "5000",
   ppv: "5100",
@@ -40,6 +41,7 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.equity, name: "Owner's equity", type: "EQUITY" },
   { code: CODES.obe, name: "Opening balances", type: "EQUITY" },
   { code: CODES.sales, name: "Product sales", type: "INCOME" },
+  { code: CODES.salesDiscount, name: "Sales discounts", type: "INCOME" },
   { code: CODES.otherIncome, name: "Other income", type: "INCOME" },
   { code: CODES.cogs, name: "Cost of goods sold", type: "COGS" },
   { code: CODES.ppv, name: "Purchase price differences", type: "COGS" },
@@ -58,10 +60,12 @@ export function inventoryAccount(kind: "RAW" | "FINISHED" | "UTILITY" | "PACKAGI
 }
 
 export const SEQUENCES: { name: string; prefix: string; start: number }[] = [
-  { name: "quote", prefix: "QT", start: 1001 },
+  { name: "quote", prefix: "Q", start: 1 },
   { name: "order", prefix: "SO", start: 1001 },
   { name: "delivery", prefix: "DN", start: 1001 },
-  { name: "invoice", prefix: "INV", start: 1001 },
+  { name: "invoice-S", prefix: "S", start: 1 },
+  { name: "invoice-A", prefix: "A", start: 1 },
+  { name: "invoice-W", prefix: "W", start: 1 },
   { name: "receipt-pay", prefix: "PMT", start: 1001 },
   { name: "po", prefix: "PO", start: 1001 },
   { name: "receipt", prefix: "RCV", start: 1001 },
@@ -72,4 +76,5 @@ export const SEQUENCES: { name: string; prefix: string; start: number }[] = [
   { name: "journal", prefix: "JE", start: 1001 },
   { name: "pack", prefix: "PK", start: 1001 },
   { name: "doc", prefix: "DOC", start: 1001 },
+  { name: "numtest", prefix: "T", start: 1 },
 ];

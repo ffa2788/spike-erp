@@ -25,7 +25,7 @@ export default async function DeliveryPage({
   return (
     <>
       <h1>Delivery {delivery.number}</h1>
-      <p className="lede">{delivery.order.party.name} · order {delivery.order.number}</p>
+      <p className="lede">{delivery.order.party.name} · order {delivery.order.number}{delivery.invoice ? <> · invoice <Link href={`/sales/invoices/${delivery.invoice.id}`}>{delivery.invoice.number}</Link></> : null}</p>
       <Flash error={query.error} notice={query.notice} />
       <p>The cost of these goods has already left inventory. Create the invoice to record the sale.</p>
       <div className="wrap"><table>

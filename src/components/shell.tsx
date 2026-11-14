@@ -13,6 +13,7 @@ const groups = [
     links: [
       { href: "/sales", label: "Sales" },
       { href: "/sales/amazon", label: "Amazon" },
+      { href: "/sales/walmart", label: "Walmart" },
       { href: "/purchasing", label: "Purchasing" },
       { href: "/production", label: "Production" },
       { href: "/inventory", label: "Inventory" },

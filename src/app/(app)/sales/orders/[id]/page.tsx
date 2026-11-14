@@ -20,14 +20,15 @@ export default async function OrderPage({
   const query = await readQuery(searchParams);
   const order = await prisma.salesOrder.findUnique({
     where: { id },
-    include: { party: true, lines: { include: { product: true, deliveryLines: true } }, deliveries: true },
+    include: { party: true, lines: { include: { product: true, deliveryLines: true } }, deliveries: { include: { invoice: true } }, invoices: true },
   });
   if (!order) notFound();
   const open = order.status === "CONFIRMED" || order.status === "PARTLY_SHIPPED";
   return (
     <>
       <h1>Order {order.number}</h1>
-      <p className="lede">{order.party.name} · {ORDER_LABEL[order.status]}</p>
+      <p className="lede">{order.party.name} · {ORDER_LABEL[order.status]} · {order.incoterm} {order.namedPlace}</p>
+      {order.invoices.length > 0 && <p>Invoices: {order.invoices.map((invoice) => <Link key={invoice.id} href={`/sales/invoices/${invoice.id}`}>{invoice.number}</Link>)}</p>}
       <Flash error={query.error} notice={query.notice} />
       <div className="wrap"><table>
         <thead><tr><th>Product</th><th>Ordered</th><th>Shipped</th></tr></thead>

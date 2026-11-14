@@ -4,7 +4,7 @@ import { parseCsv } from "@/lib/csv";
 import { prisma } from "@/lib/db";
 import { validateAmazonOrders } from "@/lib/amazon";
 import { detectKind, validateAccounts, validateCustomers, validateItems, validateJournal } from "@/lib/peachtree";
-import { commitAmazon, commitPeachtree } from "@/lib/services/importers";
+import { commitMarketplace, commitPeachtree } from "@/lib/services/importers";
 import { requireCan } from "./actor";
 
 export type PeachtreeState = {
@@ -25,18 +25,20 @@ export async function peachtreeAction(_prev: PeachtreeState, formData: FormData)
   const requested = String(formData.get("kind") ?? "");
   if (!csv.trim()) return { ..._prev, error: "Choose a file or paste the rows.", rows: [] };
   if (csv.length > 2_000_000) return { ..._prev, error: "That file is too large.", rows: [] };
-  if (requested === "amazon") {
+  if (requested === "amazon" || requested === "walmart") {
+    const channel = requested === "walmart" ? "WALMART" : "AMAZON";
+    const label = channel === "WALMART" ? "Walmart" : "Amazon";
     if (formData.get("commit") === "yes") {
-      const result = await commitAmazon(actor, csv);
-      if (!result.ok) return { kind: "amazon", csv, ready: 0, skipped: 0, rows: [], error: result.error };
-      return { kind: "amazon", csv: "", ready: result.value.invoices, skipped: 0, rows: [], notice: `Imported ${result.value.invoices} Amazon orders.` };
+      const result = await commitMarketplace(actor, csv, channel);
+      if (!result.ok) return { kind: requested, csv, ready: 0, skipped: 0, rows: [], error: result.error };
+      return { kind: requested, csv: "", ready: result.value.invoices, skipped: 0, rows: [], notice: `Imported ${result.value.invoices} ${label} orders.` };
     }
     const products = await prisma.product.findMany();
     const preview = validateAmazonOrders(parseCsv(csv).rows, products.map((product) => ({
       sku: product.sku, sellable: product.sellable, priceStatus: product.priceStatus,
     })));
     return {
-      kind: "amazon",
+      kind: requested,
       csv,
       ready: preview.ready.length,
       skipped: preview.rows.length - preview.ready.length,

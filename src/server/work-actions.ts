@@ -6,7 +6,9 @@ import { addFormulaVersion, addTaxRate, replaceSpecs, saveParty, saveProduct, se
 import { adjustLot, importBankStatement, matchAllSuggestions, postManualJournal, recordStatementLine, transferLot } from "@/lib/services/money";
 import { billReceipt, cancelPurchaseOrder, payBill, receivePurchaseOrder, savePurchaseOrder } from "@/lib/services/purchasing";
 import { createBatch, finishBatch, releaseLot, rejectLot, startBatch } from "@/lib/services/production";
-import { acceptQuote, cancelOrder, invoiceDelivery, markQuote, payInvoice, saveQuote, shipOrder } from "@/lib/services/sales";
+import { acceptQuote, cancelOrder, invoiceDelivery, markQuote, payInvoice, reviseQuote, saveQuote, shipOrder, voidInvoice } from "@/lib/services/sales";
+import type { CreditTermName, DiscountKindName, IncotermName } from "@/lib/commercial";
+import { CREDIT_TERMS, INCOTERMS } from "@/lib/commercial";
 import { requireCan } from "./actor";
 import { fail, finish } from "./http";
 
@@ -20,10 +22,24 @@ function day(formData: FormData, key: string, path: string) {
   return value;
 }
 
+function parseDiscount(raw: string, path: string): { kind: DiscountKindName; value: number } {
+  const text = raw.trim();
+  if (!text) return { kind: "NONE", value: 0 };
+  if (text.endsWith("%")) {
+    const percent = Number(text.slice(0, -1));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) fail(path, "A percent discount looks like 10%.");
+    return { kind: "PERCENT", value: Math.round(percent * 100) };
+  }
+  const dollars = parseDollars(text);
+  if (dollars == null || dollars < 0) fail(path, "A discount looks like 10% or 5.00.");
+  return { kind: "AMOUNT", value: Math.round(dollars * 100) };
+}
+
 function linesFrom(formData: FormData, path: string) {
   const productIds = formData.getAll("productId").map(String);
   const qtys = formData.getAll("qty").map(String);
   const prices = formData.getAll("specialPrice").map(String);
+  const discounts = formData.getAll("lineDiscount").map(String);
   const lines = [];
   for (let i = 0; i < productIds.length; i++) {
     if (!productIds[i] || !qtys[i]) continue;
@@ -31,9 +47,37 @@ function linesFrom(formData: FormData, path: string) {
     if (!qty) fail(path, "Enter a quantity greater than zero.");
     const special = prices[i] ? parseDollars(prices[i]) : null;
     if (prices[i] && special == null) fail(path, "A special price must look like 2.40.");
-    lines.push({ productId: productIds[i], qty, specialPrice: special });
+    const discount = parseDiscount(discounts[i] ?? "", path);
+    lines.push({ productId: productIds[i], qty, specialPrice: special, discountKind: discount.kind, discountValue: discount.value });
   }
   return lines;
+}
+
+function termsFrom(formData: FormData, path: string) {
+  const incoterm = text(formData, "incoterm") || "EXW";
+  const creditTerm = text(formData, "creditTerm") || "NET_30";
+  if (!INCOTERMS.includes(incoterm as IncotermName)) fail(path, "Choose a shipping term.");
+  if (!CREDIT_TERMS.some((term) => term.code === creditTerm)) fail(path, "Choose payment terms.");
+  const freight = text(formData, "freight") ? parseDollars(text(formData, "freight")) : 0;
+  const insurance = text(formData, "insurance") ? parseDollars(text(formData, "insurance")) : 0;
+  if (freight == null || insurance == null) fail(path, "Freight and insurance must look like 75.00.");
+  const early = text(formData, "earlyPayPercent");
+  const earlyPercent = early ? Number(early) : 0;
+  if (early && (!Number.isFinite(earlyPercent) || earlyPercent < 0 || earlyPercent > 100)) fail(path, "Early-pay percent looks like 2.");
+  const doc = parseDiscount(text(formData, "docDiscount"), path);
+  return {
+    incoterm: incoterm as IncotermName,
+    namedPlace: text(formData, "namedPlace"),
+    currency: text(formData, "currency") || "USD",
+    creditTerm: creditTerm as CreditTermName,
+    customNetDays: Number(text(formData, "customNetDays") || "30"),
+    earlyPayBps: Math.round(earlyPercent * 100),
+    earlyPayDays: Number(text(formData, "earlyPayDays") || "0"),
+    freightCents: Math.round((freight ?? 0) * 100),
+    insuranceCents: Math.round((insurance ?? 0) * 100),
+    docDiscountKind: doc.kind,
+    docDiscountValue: doc.value,
+  };
 }
 
 export async function createQuote(formData: FormData) {
@@ -45,6 +89,7 @@ export async function createQuote(formData: FormData) {
     validUntil: day(formData, "validUntil", back),
     notes: text(formData, "notes"),
     lines: linesFrom(formData, back),
+    terms: termsFrom(formData, back),
   });
   if (!result.ok) fail(back, result.error);
   finish(back, result, "Quote saved.", `/sales/quotes/${result.value.id}`);
@@ -57,6 +102,20 @@ export async function quoteMark(formData: FormData) {
   const back = `/sales/quotes/${id}`;
   if (status !== "SENT" && status !== "REJECTED" && status !== "EXPIRED") fail(back, "That is not a quote status.");
   finish(back, await markQuote(actor, id, status), "Quote updated.");
+}
+
+export async function quoteRevise(formData: FormData) {
+  const actor = await requireCan("sell");
+  const id = text(formData, "id");
+  const result = await reviseQuote(actor, id);
+  if (!result.ok) fail(`/sales/quotes/${id}`, result.error);
+  finish(`/sales/quotes/${id}`, result, "Revision saved.", `/sales/quotes/${result.value.id}`);
+}
+
+export async function invoiceVoid(formData: FormData) {
+  const actor = await requireCan("sell");
+  const id = text(formData, "id");
+  finish(`/sales/invoices/${id}`, await voidInvoice(actor, id), "Invoice voided. The number stays on file.");
 }
 
 export async function quoteAccept(formData: FormData) {

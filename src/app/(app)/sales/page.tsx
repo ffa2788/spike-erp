@@ -31,7 +31,7 @@ export default async function SalesPage({
         <tbody>
           {quotes.map((quote) => (
             <tr key={quote.id}>
-              <td><Link href={`/sales/quotes/${quote.id}`}>{quote.number}</Link></td>
+              <td><Link href={`/sales/quotes/${quote.id}`}>{quote.number} rev {quote.revision}</Link></td>
               <td>{quote.party.name}</td>
               <td>{formatDate(quote.issuedOn)}</td>
               <td>{usd(quote.totalCents)}</td>

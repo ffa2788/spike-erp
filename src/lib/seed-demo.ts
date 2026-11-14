@@ -600,12 +600,27 @@ export async function seedDemo() {
       partyId: city,
       issuedOn: day("2026-11-14"),
       validUntil: day("2026-12-14"),
-      notes: "Example quote ready to accept.",
+      notes: "Example quote ready to accept. 2/10 Net 30.",
       isExample: example,
+      terms: {
+        incoterm: "DAP",
+        namedPlace: "Clearwater plant",
+        creditTerm: "NET_30",
+        earlyPayBps: 200,
+        earlyPayDays: 10,
+        freightCents: 7500,
+      },
       lines: [{ productId: poly, qty: 200, specialPrice: null }],
     }),
     "quote",
   );
+  await prisma.party.update({ where: { id: gulf }, data: { priceLevel: "DISTRIBUTOR" } });
+  await prisma.priceBreak.createMany({
+    data: [
+      { productId: poly, priceLevel: "DISTRIBUTOR", minQty: 0, unitPriceCents: 210 },
+      { productId: poly, priceLevel: "DISTRIBUTOR", minQty: 100, unitPriceCents: 195 },
+    ],
+  });
 
   const csv = [
     "Date,Description,Amount",
