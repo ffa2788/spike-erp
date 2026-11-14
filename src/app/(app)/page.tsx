@@ -2,14 +2,14 @@ import Link from "next/link";
 import { Flash } from "@/components/ui";
 import { buildAttention } from "@/lib/attention";
 import { prisma } from "@/lib/db";
-import { todayInput } from "@/lib/dates";
+import { toDateInput, todayInput } from "@/lib/dates";
 import { usd, formatDate, formatQty } from "@/lib/format";
 import { rollUpCost } from "@/lib/costing";
 import { lotQty, stockBuckets } from "@/lib/inventory";
 import { reorderSuggestion } from "@/lib/planning";
 import { buildPlan } from "@/lib/services/mrp-run";
 import { assessBooks, currentStock } from "@/lib/read-models";
-import { buildSalesReport } from "@/lib/sales-report";
+import { executiveDashboard } from "@/lib/dashboard";
 import { bankPosition } from "@/lib/services/money";
 import { readQuery } from "@/components/ui";
 
@@ -22,45 +22,58 @@ export default async function HomePage({
 }) {
   const query = await readQuery(searchParams);
   const today = todayInput();
-  const monthStart = `${today.slice(0, 8)}01`;
-  const [books, stock, bank, products, formulas, invoices, bills, orders, deliveries, quotes, parties] = await Promise.all([
+  const [books, stock, bank, products, formulas, invoices, salesInvoices, bills, orders, deliveries, quotes, company, parties] = await Promise.all([
     assessBooks(),
     currentStock(),
     bankPosition(),
     prisma.product.findMany({ where: { active: true } }),
     prisma.formula.findMany({ where: { isDefault: true }, include: { lines: true } }),
     prisma.invoice.findMany({ where: { status: { in: ["OPEN", "PARTIAL"] } }, include: { party: true } }),
+    prisma.invoice.findMany({
+      where: { status: { not: "VOID" }, issuedOn: { gte: new Date(`${Number(today.slice(0, 4)) - 1}-01-01T00:00:00Z`) } },
+      include: { lines: true, party: true },
+    }),
     prisma.vendorBill.findMany({ where: { status: { in: ["OPEN", "PARTIAL"] } }, include: { party: true } }),
     prisma.salesOrder.findMany({ where: { status: { in: ["CONFIRMED", "PARTLY_SHIPPED"] } }, include: { party: true } }),
     prisma.delivery.findMany({ where: { invoice: null } }),
-    prisma.quote.findMany({ where: { status: "DRAFT" }, include: { party: true } }),
+    prisma.quote.findMany({ where: { status: { in: ["DRAFT", "SENT"] } }, include: { party: true } }),
+    prisma.companyProfile.findUnique({ where: { id: "company" } }),
     prisma.party.findMany({ where: { taxExempt: true, exemptionExpires: { not: null } } }),
   ]);
-  const monthInvoices = await prisma.invoice.findMany({
-    where: { issuedOn: { gte: new Date(`${monthStart}T00:00:00Z`), lte: new Date(`${today}T23:59:59Z`) } },
-    include: { lines: true, party: true },
-  });
   const materialPlan = await buildPlan(today);
   const critical = materialPlan.coverage.filter((row) => row.status === "CRITICAL").length;
   const low = materialPlan.coverage.filter((row) => row.status === "LOW").length;
-  const sales = buildSalesReport(monthInvoices.map((invoice) => ({
-    id: invoice.id,
-    number: invoice.number,
-    issuedOn: today,
-    partyName: invoice.party.name,
-    channel: invoice.channel,
-    subtotalCents: invoice.subtotalCents,
-    taxCents: invoice.taxCents,
-    totalCents: invoice.totalCents,
-    feeCents: invoice.feeCents,
-    lines: invoice.lines.map((line) => ({
-      productId: line.productId,
-      productName: line.description,
-      qty: Number(line.qty),
-      amountCents: Math.round(Number(line.qty) * line.unitPriceCents),
-      cogsCents: line.cogsCents,
+  const belowReorder = products.filter((product) => {
+    if (!product.trackInventory || Number(product.minQty) <= 0) return false;
+    return stockBuckets(stock, product.id, today).available < Number(product.minQty);
+  }).length;
+  const dash = executiveDashboard({
+    asOf: today,
+    entity: company?.entityType === "C_CORP" ? "C_CORP" : "S_CORP",
+    invoices: salesInvoices.map((invoice) => ({
+      issuedOn: toDateInput(invoice.issuedOn),
+      channel: invoice.channel,
+      partyName: invoice.party.name,
+      subtotalCents: invoice.subtotalCents,
+      lines: invoice.lines.map((line) => ({
+        productId: line.productId,
+        productName: line.description,
+        amountCents: Math.round(Number(line.qty) * line.unitPriceCents),
+        cogsCents: line.cogsCents,
+      })),
     })),
-  })));
+    quotes: quotes.map((quote) => ({ status: quote.status, totalCents: quote.totalCents })),
+    receivables: invoices.map((invoice) => ({ balanceCents: invoice.balanceCents, due: toDateInput(invoice.dueOn) })),
+    payables: bills.map((bill) => ({ balanceCents: bill.balanceCents, due: toDateInput(bill.dueOn) })),
+    cashCents: books.cashCents,
+    unreconciled: bank.openStatement,
+    inventoryCents: books.inventoryLots,
+    belowReorder,
+    criticalCoverage: critical,
+    lowCoverage: low,
+    ordersToShip: orders.length,
+    uninvoicedDeliveries: deliveries.length,
+  });
   const costProducts = products.map((product) => ({
     id: product.id,
     sku: product.sku,
@@ -125,7 +138,7 @@ export default async function HomePage({
     uninvoicedDeliveries: deliveries.map((delivery) => ({ id: delivery.id, number: delivery.number })),
     bankOpenCount: bank.openStatement,
     buys,
-    draftQuotes: quotes.map((quote) => ({ id: quote.id, number: quote.number, name: quote.party.name })),
+    draftQuotes: quotes.filter((quote) => quote.status === "DRAFT").map((quote) => ({ id: quote.id, number: quote.number, name: quote.party.name })),
     expiringCertificates: parties.filter((party) => soon(party.exemptionExpires)).map((party) => ({
       id: party.id, name: party.name, expires: formatDate(party.exemptionExpires),
     })),
@@ -148,14 +161,46 @@ export default async function HomePage({
         <div className="banner bad">Stop. {books.check.problems[0]}</div>
       )}
       <div className="cards">
-        <div className="card"><span>Cash in the bank</span><strong>{usd(books.cashCents)}</strong></div>
-        <div className="card"><span>Customers owe us</span><strong>{usd(books.arSub)}</strong></div>
-        <div className="card"><span>We owe suppliers</span><strong>{usd(books.apSub)}</strong></div>
-        <div className="card"><span>Inventory</span><strong>{usd(books.inventoryLots)}</strong></div>
-        <div className="card"><span>Sales this month</span><strong>{usd(sales.subtotalCents)}</strong></div>
-        <div className="card"><span>Margin this month</span><strong>{usd(sales.marginCents)}</strong></div>
-        <Link className="card" href="/planning/coverage"><span>Coverage</span><strong>{critical} critical, {low} low</strong></Link>
+        <Link className="card" href="/reports/sales"><span>Sales this month</span><strong>{usd(dash.mtd.salesCents)}</strong><p className="muted">{dash.mtd.versus.words}</p></Link>
+        <Link className="card" href="/reports/sales"><span>Sales this year</span><strong>{usd(dash.ytd.salesCents)}</strong><p className="muted">{dash.ytd.versus.words}</p></Link>
+        <Link className="card" href="/reports/margins"><span>Gross margin</span><strong>{dash.marginPercent == null ? "—" : `${dash.marginPercent}%`}</strong><p className="muted">Sales minus the full cost on those invoices.</p></Link>
+        {dash.channels.map((channel) => (
+          <Link key={channel.code} className="card" href={`/reports/sales?channel=${channel.code}`}>
+            <span>{channel.code} — {channel.label}</span>
+            <strong>{usd(channel.salesCents)}</strong>
+            <p className="muted">{channel.marginPercent == null ? "No sales" : `${channel.marginPercent}% margin`}</p>
+          </Link>
+        ))}
+        <Link className="card" href="/sales"><span>Open quotes</span><strong>{dash.quoteCount}</strong><p className="muted">Pipeline {usd(dash.pipelineCents)}</p></Link>
+        <Link className="card" href="/reports/ar"><span>Overdue from customers</span><strong>{usd(dash.overdueCents)}</strong><p className="muted">They owe {usd(dash.receivableCents)} in total.</p></Link>
+        <Link className="card" href="/reports/ap"><span>Bills due in 14 days</span><strong>{usd(dash.payablesSoonCents)}</strong><p className="muted">{dash.payablesSoonCount} bill{dash.payablesSoonCount === 1 ? "" : "s"}, including any already late.</p></Link>
+        <Link className="card" href="/money"><span>Cash in the bank</span><strong>{usd(dash.cashCents)}</strong></Link>
+        <Link className="card" href="/money/reconcile"><span>Unreconciled bank lines</span><strong>{dash.unreconciled}</strong></Link>
+        <Link className="card" href="/inventory"><span>Inventory</span><strong>{usd(dash.inventoryCents)}</strong><p className="muted">{dash.belowReorder} below the reorder point.</p></Link>
+        <Link className="card" href="/planning/coverage"><span>Low coverage</span><strong>{dash.criticalCoverage} critical, {dash.lowCoverage} low</strong><p className="muted">Days of cover from the materials plan.</p></Link>
+        <Link className="card" href="/sales"><span>Waiting to ship</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>
+        <Link className="card" href="/tax"><span>Next tax date</span><strong>{dash.taxDeadlines[0] ? formatDate(dash.taxDeadlines[0].date) : "None"}</strong><p className="muted">{dash.taxDeadlines[0]?.name}</p></Link>
       </div>
+      <h2>Top products this year</h2>
+      <div className="wrap"><table>
+        <thead><tr><th>Product</th><th>Sales</th><th>Margin</th></tr></thead>
+        <tbody>
+          {dash.topProducts.map((row) => (
+            <tr key={row.name}><td><Link href="/reports/margins">{row.name}</Link></td><td>{usd(row.salesCents)}</td><td>{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
+          ))}
+          {dash.topProducts.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
+        </tbody>
+      </table></div>
+      <h2>Top customers this year</h2>
+      <div className="wrap"><table>
+        <thead><tr><th>Customer</th><th>Sales</th><th>Margin</th></tr></thead>
+        <tbody>
+          {dash.topCustomers.map((row) => (
+            <tr key={row.name}><td><Link href="/reports/sales">{row.name}</Link></td><td>{usd(row.salesCents)}</td><td>{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
+          ))}
+          {dash.topCustomers.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
+        </tbody>
+      </table></div>
       <h2>What needs attention</h2>
       {attention.length === 0 ? <p>Nothing is waiting on you today.</p> : (
         <div className="attention">
@@ -177,7 +222,7 @@ export default async function HomePage({
         <Link className="btn secondary" href="/money/reconcile">Check the bank</Link>
         <Link className="btn secondary" href="/inventory">Print a label</Link>
       </div>
-      <p className="muted">Sales this month are product sales before tax. Margin is those sales minus the cost recorded on the same invoices.</p>
+      <p className="muted">Sales are product sales before tax. Gross margin uses the cost recorded on those same invoices, including the recipe and packaging in that cost. Month and year are compared with the same dates last month and last year.</p>
       <p className="muted">{formatQty(stock.reduce((sum, lot) => sum + lotQty(lot), 0))} on hand across all lots, including lots waiting for quality.</p>
     </>
   );
