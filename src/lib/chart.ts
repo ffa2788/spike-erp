@@ -5,6 +5,7 @@ export const CODES = {
   invFg: "1210",
   wip: "1220",
   shipped: "1230",
+  packaging: "1240",
   ap: "2000",
   grni: "2100",
   tax: "2200",
@@ -15,6 +16,7 @@ export const CODES = {
   cogs: "5000",
   ppv: "5100",
   utilityApplied: "5300",
+  packLabor: "5400",
   amazonFees: "6100",
   bankFees: "6200",
   adjustment: "6300",
@@ -29,6 +31,7 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.invFg, name: "Finished goods on hand", type: "ASSET" },
   { code: CODES.wip, name: "Batches in progress", type: "ASSET" },
   { code: CODES.shipped, name: "Shipped, not yet billed", type: "ASSET" },
+  { code: CODES.packaging, name: "Packaging on hand", type: "ASSET" },
   { code: CODES.ap, name: "Money we owe suppliers", type: "LIABILITY" },
   { code: CODES.grni, name: "Received, not yet billed", type: "LIABILITY" },
   { code: CODES.tax, name: "Sales tax to send the state", type: "LIABILITY" },
@@ -39,14 +42,16 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.cogs, name: "Cost of goods sold", type: "COGS" },
   { code: CODES.ppv, name: "Purchase price differences", type: "COGS" },
   { code: CODES.utilityApplied, name: "Utility cost in batches", type: "COGS" },
+  { code: CODES.packLabor, name: "Packing labor applied", type: "COGS" },
   { code: CODES.amazonFees, name: "Amazon fees", type: "EXPENSE" },
   { code: CODES.bankFees, name: "Bank fees", type: "EXPENSE" },
   { code: CODES.adjustment, name: "Inventory adjustments", type: "EXPENSE" },
 ];
 
-export function inventoryAccount(kind: "RAW" | "FINISHED" | "UTILITY"): string | null {
+export function inventoryAccount(kind: "RAW" | "FINISHED" | "UTILITY" | "PACKAGING"): string | null {
   if (kind === "RAW") return CODES.invRaw;
   if (kind === "FINISHED") return CODES.invFg;
+  if (kind === "PACKAGING") return CODES.packaging;
   return null;
 }
 
@@ -63,4 +68,6 @@ export const SEQUENCES: { name: string; prefix: string; start: number }[] = [
   { name: "batch", prefix: "PB", start: 1001 },
   { name: "lot", prefix: "L", start: 1001 },
   { name: "journal", prefix: "JE", start: 1001 },
+  { name: "pack", prefix: "PK", start: 1001 },
+  { name: "doc", prefix: "DOC", start: 1001 },
 ];

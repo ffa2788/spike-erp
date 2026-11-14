@@ -1,5 +1,6 @@
 import type { Channel, ProductKind } from "@prisma/client";
 import { rollUpCost } from "../costing";
+import { formulaFromPounds } from "../formula-math";
 import { nameKey, validCode } from "../names";
 import { buyPriceProblem, priceStatusOf } from "../pricing";
 import { err, ok, type Result } from "../result";
@@ -113,6 +114,8 @@ export type ProductInput = {
   sku: string;
   name: string;
   kind: ProductKind;
+  form?: "LIQUID" | "POWDER" | "OTHER";
+  specificGravity?: number | null;
   unit: string;
   category: string;
   standardCost: number;
@@ -190,6 +193,8 @@ export async function saveProductTx(tx: Tx, actor: Actor, input: ProductInput): 
     name,
     nameKey: key,
     kind: input.kind,
+    form: input.form ?? "OTHER",
+    specificGravity: input.specificGravity ?? null,
     unit: input.unit.trim(),
     category: input.category.trim(),
     standardCost: input.standardCost,
@@ -235,7 +240,8 @@ export async function addFormulaVersion(
     batchQty: number;
     notes: string;
     makeDefault: boolean;
-    lines: { ingredientId: string; percent: number }[];
+    lines: { ingredientId: string; percent?: number; pounds?: number }[];
+    specificGravity?: number | null;
   },
 ): Promise<Result<{ id: string }>> {
   const denied = deny(actor, "editMasters");
@@ -244,18 +250,33 @@ export async function addFormulaVersion(
     const product = await tx.product.findUnique({ where: { id: input.productId } });
     if (!product) return err("That product was not found.");
     if (product.kind !== "FINISHED") return err("Only a finished product has a formula. Raw materials and utilities have a cost instead.");
-    if (!(input.batchQty > 0)) return err("Enter a batch size greater than zero.");
     if (input.lines.length === 0) return err("Add at least one ingredient.");
-    const seen = new Set<string>();
-    for (const line of input.lines) {
-      if (!(line.percent > 0)) return err("Every ingredient needs a percent greater than zero.");
-      if (line.ingredientId === product.id) return err("A product cannot be an ingredient in its own formula.");
-      if (seen.has(line.ingredientId)) return err("Each ingredient can appear only once. Combine the percents.");
-      seen.add(line.ingredientId);
+    const usingPounds = input.lines.some((line) => line.pounds != null);
+    let normalized: { ingredientId: string; percent: number; qtyLb: number }[] = [];
+    let batchQty = input.batchQty;
+    if (usingPounds) {
+      const built = formulaFromPounds(input.lines.map((line) => ({ key: line.ingredientId, pounds: line.pounds ?? 0 })));
+      if (!built.ok) return built;
+      batchQty = built.totalLb;
+      normalized = built.lines.map((line) => ({ ingredientId: line.key, percent: line.percent, qtyLb: line.pounds }));
+    } else {
+      if (!(batchQty > 0)) return err("Enter a batch size greater than zero.");
+      const sum = input.lines.reduce((total, line) => total + (line.percent ?? 0), 0);
+      if (Math.abs(sum - 100) >= 0.001) {
+        return err(`The ingredients add up to ${sum.toFixed(2)}%. They must add up to 100%.`);
+      }
+      normalized = input.lines.map((line) => ({
+        ingredientId: line.ingredientId,
+        percent: line.percent ?? 0,
+        qtyLb: (batchQty * (line.percent ?? 0)) / 100,
+      }));
     }
-    const sum = input.lines.reduce((total, line) => total + line.percent, 0);
-    if (Math.abs(sum - 100) >= 0.001) {
-      return err(`The ingredients add up to ${sum.toFixed(2)}%. They must add up to 100%.`);
+    const seen = new Set<string>();
+    for (const line of normalized) {
+      if (!(line.percent > 0)) return err("Every ingredient needs a weight greater than zero.");
+      if (line.ingredientId === product.id) return err("A product cannot be an ingredient in its own formula.");
+      if (seen.has(line.ingredientId)) return err("Each ingredient can appear only once. Combine the weights.");
+      seen.add(line.ingredientId);
     }
     const products = await tx.product.findMany();
     const formulas = await tx.formula.findMany({ where: { isDefault: true }, include: { lines: true } });
@@ -276,10 +297,12 @@ export async function addFormulaVersion(
     costFormulas.push({
       productId: product.id,
       isDefault: true,
-      lines: input.lines.map((line) => ({ ingredientId: line.ingredientId, percent: line.percent })),
+      lines: normalized.map((line) => ({ ingredientId: line.ingredientId, percent: line.percent })),
     });
     const rolled = rollUpCost(product.id, costProducts, costFormulas);
-    if (rolled.problems.some((problem) => /loops/i.test(problem))) return err(rolled.problems[0]);
+    if (rolled.status !== "OK" || rolled.costPerUnit == null) {
+      return err(rolled.problems[0] ?? "This formula cannot be saved until every ingredient, including sub-recipes, has a real cost.");
+    }
     const missing = input.lines.filter((line) => !products.some((item) => item.id === line.ingredientId));
     if (missing.length) return err("One of the ingredients is not on the product list.");
     const last = await tx.formula.findFirst({
@@ -294,13 +317,15 @@ export async function addFormulaVersion(
       data: {
         productId: product.id,
         version,
-        batchQty: input.batchQty,
+        batchQty,
+        specificGravity: input.specificGravity ?? null,
         isDefault: input.makeDefault || !last,
         notes: input.notes.trim(),
         lines: {
-          create: input.lines.map((line, index) => ({
+          create: normalized.map((line, index) => ({
             ingredientId: line.ingredientId,
             percent: line.percent,
+            qtyLb: line.qtyLb,
             sort: index,
           })),
         },

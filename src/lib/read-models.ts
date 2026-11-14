@@ -28,7 +28,10 @@ export async function assessBooks() {
   const arGl = normalBalance(lines, CODES.ar);
   const apGl = normalBalance(lines, CODES.ap);
   const inventoryGl =
-    normalBalance(lines, CODES.invRaw) + normalBalance(lines, CODES.invFg) + normalBalance(lines, CODES.wip);
+    normalBalance(lines, CODES.invRaw) +
+    normalBalance(lines, CODES.invFg) +
+    normalBalance(lines, CODES.wip) +
+    normalBalance(lines, CODES.packaging);
   const shippedGl = normalBalance(lines, CODES.shipped);
   const invoices = await prisma.invoice.findMany();
   const bills = await prisma.vendorBill.findMany();

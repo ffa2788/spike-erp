@@ -18,6 +18,30 @@ enum ProductKind {
   RAW
   FINISHED
   UTILITY
+  PACKAGING
+}
+
+enum ProductForm {
+  LIQUID
+  POWDER
+  OTHER
+}
+
+enum DocKind {
+  TDS
+  SDS
+}
+
+enum DocStatus {
+  DRAFT
+  REVIEWED
+  PUBLISHED
+}
+
+enum PackBasis {
+  UNIT
+  CASE
+  PALLET
 }
 
 enum PriceStatus {
@@ -184,6 +208,8 @@ model Product {
   name              String
   nameKey           String      @unique
   kind              ProductKind
+  form              ProductForm @default(OTHER)
+  specificGravity   Decimal?    @db.Decimal(8, 4)
   unit              String
   category          String      @default("")
   standardCost      Decimal     @default(0) @db.Decimal(18, 6)
@@ -208,6 +234,17 @@ model Product {
   nsfExpiresOn      DateTime?
   nsfFormulaVersion Int?
   nsfClaim          String      @default("")
+  nsfListingId      String?
+  nsfListing        NsfListing? @relation(fields: [nsfListingId], references: [id])
+  unNumber          String      @default("")
+  properShippingName String     @default("")
+  transportClass    String      @default("")
+  packingGroup      String      @default("")
+  appearance        String      @default("")
+  phText            String      @default("")
+  flashPoint        String      @default("")
+  solubility        String      @default("")
+  ghsClassification String      @default("")
   ghsSignal         String      @default("")
   ghsPictograms     String      @default("")
   hazardStatements  String      @default("")
@@ -225,6 +262,10 @@ model Product {
   orderLines       SalesOrderLine[]
   poLines          PurchaseOrderLine[]
   batches          ProductionBatch[]
+  packagedSkus     PackagedSku[] @relation("BulkProduct")
+  outputOfPackages PackagedSku[] @relation("PackagedOutput")
+  packBomLines     PackBomLine[]
+  documents        SafetyDocument[]
 
   @@index([kind])
 }
@@ -234,9 +275,10 @@ model Formula {
   productId String
   product   Product  @relation(fields: [productId], references: [id])
   version   Int
-  batchQty  Decimal  @db.Decimal(18, 4)
-  isDefault Boolean  @default(false)
-  notes     String   @default("")
+  batchQty        Decimal  @db.Decimal(18, 4)
+  specificGravity Decimal? @db.Decimal(8, 4)
+  isDefault       Boolean  @default(false)
+  notes           String   @default("")
 
   lines   FormulaLine[]
   batches ProductionBatch[]
@@ -250,7 +292,8 @@ model FormulaLine {
   formula      Formula @relation(fields: [formulaId], references: [id], onDelete: Cascade)
   ingredientId String
   ingredient   Product @relation(fields: [ingredientId], references: [id])
-  percent      Decimal @db.Decimal(8, 4)
+  percent      Decimal @db.Decimal(10, 4)
+  qtyLb        Decimal @default(0) @db.Decimal(18, 4)
   sort         Int
 }
 
@@ -742,4 +785,83 @@ model ImportBatch {
   createdBy String
   rowCount  Int
   notes     String   @default("")
+}
+
+/// Official NSF/ANSI/CAN 60 trade names from the public listing. Not example products.
+model NsfListing {
+  id           String   @id @default(cuid())
+  tradeName    String
+  category     String
+  function     String
+  maxUseMgL    Decimal  @db.Decimal(8, 2)
+  sourceUrl    String
+  listedAsOf   DateTime
+  active       Boolean  @default(true)
+  products     Product[]
+
+  @@unique([tradeName])
+}
+
+model PackagedSku {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation("BulkProduct", fields: [productId], references: [id])
+  outputProductId String
+  outputProduct  Product  @relation("PackagedOutput", fields: [outputProductId], references: [id])
+  packageCode    String
+  unitsPerCase   Int
+  casesPerPallet Int
+  laborPerUnit   Decimal  @default(0) @db.Decimal(18, 4)
+  isExample      Boolean  @default(false)
+  lines          PackBomLine[]
+  runs           PackRun[]
+
+  @@unique([outputProductId])
+  @@index([productId, packageCode])
+}
+
+model PackBomLine {
+  id            String      @id @default(cuid())
+  packagedSkuId String
+  packagedSku   PackagedSku @relation(fields: [packagedSkuId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Product     @relation(fields: [materialId], references: [id])
+  basis         PackBasis
+  qty           Decimal     @db.Decimal(18, 4)
+}
+
+model PackRun {
+  id                  String      @id @default(cuid())
+  number              String      @unique
+  packagedSkuId       String
+  packagedSku         PackagedSku @relation(fields: [packagedSkuId], references: [id])
+  units               Int
+  packedOn            DateTime
+  journalId           String?
+  contentsCostCents   Int
+  packagingCostCents  Int
+  laborCents          Int
+  outputLotId         String?
+  isExample           Boolean     @default(false)
+}
+
+model SafetyDocument {
+  id           String    @id @default(cuid())
+  number       String    @unique
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  kind         DocKind
+  version      Int
+  status       DocStatus @default(DRAFT)
+  revisionOn   DateTime
+  title        String
+  snapshot     Json
+  reviewNote   String    @default("")
+  reviewedBy   String    @default("")
+  reviewedAt   DateTime?
+  publishedAt  DateTime?
+  isExample    Boolean   @default(false)
+
+  @@unique([productId, kind, version])
+  @@index([kind, status])
 }

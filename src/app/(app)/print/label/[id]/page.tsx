@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { NsfMark } from "@/components/nsf-mark";
 import { PrintButton } from "@/components/print-button";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
@@ -25,7 +26,7 @@ export default async function PrintLabel({
   const { id } = await params;
   const query = await searchParams;
   const pack = typeof query.pack === "string" ? query.pack : "product";
-  const lot = await prisma.lot.findUnique({ where: { id }, include: { product: true } });
+  const lot = await prisma.lot.findUnique({ where: { id }, include: { product: { include: { nsfListing: true } } } });
   const company = await prisma.companyProfile.findUnique({ where: { id: "company" } });
   if (!lot || !company) notFound();
   const icons = lot.product.ghsPictograms.split(",").map((item) => item.trim()).filter(Boolean);
@@ -41,9 +42,7 @@ export default async function PrintLabel({
       <div className="row">{icons.map((icon) => <Diamond key={icon} kind={icon} />)}</div>
       <p>{lot.product.hazardStatements}</p>
       <p>{lot.product.precautionary}</p>
-      {lot.nsfEligible && (
-        <p>NSF/ANSI 60. Certificate {lot.product.nsfCertNumber}. {lot.product.nsfClaim}</p>
-      )}
+      <NsfMark listing={lot.product.nsfListing} />
       <p>Expires {formatDate(lot.expiresOn)}</p>
     </article>
   );

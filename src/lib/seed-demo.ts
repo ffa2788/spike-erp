@@ -2,7 +2,9 @@ import bcrypt from "bcryptjs";
 import { dateFromParts } from "./dates";
 import { DEMO_PASSWORD, DEMO_USERS } from "./demo-auth";
 import { prisma } from "./db";
+import { NSF_LISTED_AS_OF, NSF_LISTING_SOURCE, NSF_PUBLIC_LISTING } from "./nsf-listings";
 import { addFormulaVersion, replaceSpecs, saveParty, saveProduct } from "./services/masters";
+import { generateDocument } from "./services/documents";
 import {
   ensureFoundation,
   importBankStatement,
@@ -42,7 +44,8 @@ export async function wipeDatabase() {
       "QcResult", "Movement", "Lot", "FormulaLine", "Formula", "QualitySpec",
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
-      "ImportBatch", "AuditLog", "LoginAttempt", "CompanyProfile", "User"
+      "ImportBatch", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "AuditLog", "LoginAttempt", "CompanyProfile", "User"
     RESTART IDENTITY CASCADE
   `);
 }
@@ -305,23 +308,11 @@ export async function seedDemo() {
     category: "Utility",
     notes: "Utility. Consumption is recorded, but there is no on-hand balance.",
   });
-  const nsf = {
-    nsfCertified: true,
-    nsfCertNumber: "EX-NSF-60-100",
-    nsfBody: "Example certifying body",
-    nsfUses: "Example drinking-water treatment use",
-    nsfIssuedOn: day("2024-01-15"),
-    nsfExpiresOn: day("2027-12-31"),
-    nsfFormulaVersion: 1,
-    nsfClaim: "Example only: produced under an NSF/ANSI 60 listing for drinking-water treatment. Not a real listing.",
-    sellable: true,
-    category: "Finished phosphate",
-  };
-  const poly = await product({ ...base, ...nsf, sku: "POLY-LIQ", name: "SPER PolyPhos liquid", kind: "FINISHED", unit: "lb", standardCost: 0, listPrice: 2.4, pack: "Drum" });
-  const beads = await product({ ...base, ...nsf, sku: "POLY-BEAD", name: "SPER PolyPhos beads", kind: "FINISHED", unit: "lb", standardCost: 0, listPrice: 3.1, pack: "Bag", nsfExpiresOn: day("2026-12-01") });
-  const preventer = await product({ ...base, ...nsf, sku: "RUST-PREV", name: "SPER Rust Preventer", kind: "FINISHED", unit: "lb", standardCost: 0, listPrice: 4.25, pack: "Tote" });
-  const remover = await product({ ...base, ...nsf, sku: "RUST-REM", name: "SPER Rust Remover", kind: "FINISHED", unit: "lb", standardCost: 0, listPrice: 3.6, nsfCertified: false, nsfCertNumber: "", nsfFormulaVersion: null, nsfClaim: "", nsfExpiresOn: null, nsfIssuedOn: null });
-  const lawn = await product({ ...base, sku: "LAWN", name: "SPER Lawn Booster", kind: "FINISHED", unit: "lb", standardCost: 0, listPrice: 2.85, sellable: true, pack: "Bag", category: "Lawn" });
+  const poly = await product({ ...base, sku: "POLY-LIQ", name: "SPER PolyPhos liquid", kind: "FINISHED", form: "LIQUID", specificGravity: 1.2, unit: "lb", standardCost: 0, listPrice: 2.4, sellable: true, pack: "" });
+  const beads = await product({ ...base, sku: "POLY-BEAD", name: "SPER PolyPhos beads", kind: "FINISHED", form: "POWDER", unit: "lb", standardCost: 0, listPrice: 3.1, sellable: true, nsfFormulaVersion: 1, pack: "" });
+  const preventer = await product({ ...base, sku: "RUST-PREV", name: "SPER Rust Preventer", kind: "FINISHED", form: "LIQUID", specificGravity: 1.15, unit: "lb", standardCost: 0, listPrice: 4.25, sellable: true, pack: "" });
+  const remover = await product({ ...base, sku: "RUST-REM", name: "SPER Rust Remover", kind: "FINISHED", form: "LIQUID", specificGravity: 1.1, unit: "lb", standardCost: 0, listPrice: 3.6, sellable: true, pack: "" });
+  const lawn = await product({ ...base, sku: "LAWN", name: "SPER Lawn Booster", kind: "FINISHED", form: "POWDER", unit: "lb", standardCost: 0, listPrice: 2.85, sellable: true, pack: "", category: "Lawn" });
 
   const formula = async (productId: string, lines: { ingredientId: string; percent: number }[]) =>
     must(
@@ -491,6 +482,110 @@ export async function seedDemo() {
   const rust = must(await createBatch(actor, { productId: preventer, plannedQty: 1000, notes: "Example batch waiting for quality.", isExample: example }), "rust batch");
   must(await startBatch(actor, rust.id, day("2026-11-13")), "start rust");
   must(await finishBatch(actor, { batchId: rust.id, actualQty: 1000, closedOn: day("2026-11-13") }), "finish rust");
+
+  const packItem = async (sku: string, name: string, cost: number) =>
+    product({
+      ...base,
+      sku,
+      name,
+      kind: "PACKAGING",
+      unit: "each",
+      standardCost: cost,
+      category: "Packaging",
+      notes: "Example packaging material. Not a real vendor price.",
+      shelfLifeDays: null,
+      ghsSignal: "",
+      ghsPictograms: "",
+      hazardStatements: "",
+      precautionary: "",
+    });
+  const jug = await packItem("PKG-JUG-1", "Example 1 gal jug", 0.85);
+  const cap = await packItem("PKG-CAP", "Example jug cap", 0.12);
+  const label = await packItem("PKG-LABEL", "Example product label", 0.08);
+  const carton = await packItem("PKG-CARTON-4", "Example 4x1 gal carton", 0.8);
+  const divider = await packItem("PKG-DIVIDER", "Example carton divider", 0.2);
+  const tape = await packItem("PKG-TAPE", "Example packing tape", 0.15);
+  const pallet = await packItem("PKG-PALLET", "Example pallet", 12);
+  const wrap = await packItem("PKG-WRAP", "Example stretch wrap", 3);
+  const corner = await packItem("PKG-CORNER", "Example corner board", 0.35);
+  const bag50 = await packItem("PKG-BAG-50", "Example 50 lb bag", 0.42);
+  must(
+    await postOpening(actor, {
+      date: day("2026-10-01"),
+      cashCents: 0,
+      isExample: example,
+      lots: [jug, cap, label, carton, divider, tape, pallet, wrap, corner, bag50].map((id, index) => ({
+        productId: id,
+        qty: index >= 6 ? 40 : 500,
+        unitCost: [0.85, 0.12, 0.08, 0.8, 0.2, 0.15, 12, 3, 0.35, 0.42][index],
+        lotNumber: `EX-PKG-${index + 1}`,
+        expiresOn: null,
+        formulaVersion: null,
+        nsfEligible: false,
+        notes: "Example packaging stock",
+      })),
+    }),
+    "packaging stock",
+  );
+  const oneGal = await product({ ...base, sku: "POLY-LIQ-1G", name: "SPER PolyPhos liquid, 1 gal", kind: "FINISHED", form: "LIQUID", specificGravity: 1.2, unit: "each", standardCost: 0, listPrice: 28, sellable: true, trackInventory: true, notes: "Example packaged SKU. The liquid itself is not on the NSF listing." });
+  const beadBag = await product({ ...base, sku: "POLY-BEAD-50", name: "SPER PolyPhos beads, 50 lb bag", kind: "FINISHED", form: "POWDER", unit: "each", standardCost: 0, listPrice: 160, sellable: true, nsfFormulaVersion: 1 });
+  const rustGal = await product({ ...base, sku: "RUST-1G", name: "SPER Rust Preventer, 1 gal", kind: "FINISHED", form: "LIQUID", specificGravity: 1.15, unit: "each", standardCost: 0, listPrice: 48, sellable: true, notes: "Example packaged SKU. Not on the NSF listing." });
+  const liquidBom = [
+    { materialId: jug, basis: "UNIT" as const, qty: 1 },
+    { materialId: cap, basis: "UNIT" as const, qty: 1 },
+    { materialId: label, basis: "UNIT" as const, qty: 2 },
+    { materialId: carton, basis: "CASE" as const, qty: 1 },
+    { materialId: divider, basis: "CASE" as const, qty: 1 },
+    { materialId: tape, basis: "CASE" as const, qty: 1 },
+    { materialId: pallet, basis: "PALLET" as const, qty: 1 },
+    { materialId: wrap, basis: "PALLET" as const, qty: 1 },
+    { materialId: corner, basis: "PALLET" as const, qty: 4 },
+  ];
+  await prisma.packagedSku.create({
+    data: { productId: poly, outputProductId: oneGal, packageCode: "LIQ-1", unitsPerCase: 4, casesPerPallet: 36, laborPerUnit: 0.4, isExample: true, lines: { create: liquidBom } },
+  });
+  await prisma.packagedSku.create({
+    data: {
+      productId: beads,
+      outputProductId: beadBag,
+      packageCode: "PWD-50LB",
+      unitsPerCase: 1,
+      casesPerPallet: 40,
+      laborPerUnit: 0.25,
+      isExample: true,
+      lines: { create: [
+        { materialId: bag50, basis: "UNIT", qty: 1 },
+        { materialId: label, basis: "UNIT", qty: 1 },
+        { materialId: tape, basis: "PALLET", qty: 2 },
+        { materialId: pallet, basis: "PALLET", qty: 1 },
+        { materialId: wrap, basis: "PALLET", qty: 1 },
+        { materialId: corner, basis: "PALLET", qty: 4 },
+      ] },
+    },
+  });
+  await prisma.packagedSku.create({
+    data: { productId: preventer, outputProductId: rustGal, packageCode: "LIQ-1", unitsPerCase: 4, casesPerPallet: 36, laborPerUnit: 0.4, isExample: true, lines: { create: liquidBom } },
+  });
+  for (const row of NSF_PUBLIC_LISTING) {
+    await prisma.nsfListing.create({
+      data: { ...row, sourceUrl: NSF_LISTING_SOURCE, listedAsOf: day(NSF_LISTED_AS_OF) },
+    });
+  }
+  const beadListing = await prisma.nsfListing.findUniqueOrThrow({ where: { tradeName: "PolyPhos Beads" } });
+  await prisma.product.updateMany({
+    where: { sku: { in: ["POLY-BEAD", "POLY-BEAD-50"] } },
+    data: {
+      nsfListingId: beadListing.id,
+      nsfCertified: true,
+      nsfBody: "NSF",
+      nsfUses: beadListing.function,
+      nsfClaim: "Listed as PolyPhos Beads. Maximum use 13 mg/L on the NSF public listing.",
+    },
+  });
+  must(await generateDocument(actor, beads, "TDS"), "beads tds");
+  must(await generateDocument(actor, beads, "SDS"), "beads sds");
+  must(await generateDocument(actor, preventer, "TDS"), "rust tds");
+  must(await generateDocument(actor, preventer, "SDS"), "rust sds");
 
   must(
     await saveQuote(actor, {

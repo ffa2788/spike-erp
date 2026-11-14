@@ -158,6 +158,7 @@ export default async function ProductPage({
           <button className="btn" type="submit">Save product</button>
         </form>
       </details>
+      <p><Link className="btn" href={`/products/${product.id}/formula`}>Open the formula builder</Link></p>
       <p><Link href="/products">Back to products</Link></p>
     </>
   );

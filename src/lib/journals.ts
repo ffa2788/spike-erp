@@ -197,7 +197,29 @@ export function finishJournal(input: { wipCents: number; utilityCents: number; f
   return lines;
 }
 
-export function openingJournal(input: { cashCents: number; rawCents: number; fgCents: number }): DraftLine[] {
+export function packJournal(input: {
+  outputCents: number;
+  bulkCents: number;
+  packagingCents: number;
+  laborCents: number;
+}): DraftLine[] {
+  const lines: DraftLine[] = [
+    { accountCode: CODES.invFg, debitCents: input.outputCents, creditCents: 0, memo: "Packed goods" },
+  ];
+  if (input.bulkCents > 0) {
+    lines.push({ accountCode: CODES.invFg, debitCents: 0, creditCents: input.bulkCents, memo: "Bulk used in the pack" });
+  }
+  if (input.packagingCents > 0) {
+    lines.push({ accountCode: CODES.packaging, debitCents: 0, creditCents: input.packagingCents, memo: "Packaging used" });
+  }
+  if (input.laborCents > 0) {
+    lines.push({ accountCode: CODES.packLabor, debitCents: 0, creditCents: input.laborCents, memo: "Packing labor" });
+  }
+  return lines;
+}
+
+export function openingJournal(input: { cashCents: number; rawCents: number; fgCents: number; packagingCents?: number }): DraftLine[] {
+  const packagingCents = input.packagingCents ?? 0;
   const lines: DraftLine[] = [];
   if (input.cashCents > 0) {
     lines.push({ accountCode: CODES.cash, debitCents: input.cashCents, creditCents: 0, memo: "Opening cash" });
@@ -213,7 +235,15 @@ export function openingJournal(input: { cashCents: number; rawCents: number; fgC
       memo: "Opening finished goods",
     });
   }
-  const total = input.cashCents + input.rawCents + input.fgCents;
+  if (packagingCents > 0) {
+    lines.push({
+      accountCode: CODES.packaging,
+      debitCents: packagingCents,
+      creditCents: 0,
+      memo: "Opening packaging",
+    });
+  }
+  const total = input.cashCents + input.rawCents + input.fgCents + packagingCents;
   lines.push({ accountCode: CODES.obe, debitCents: 0, creditCents: total, memo: "Opening balances" });
   return lines;
 }

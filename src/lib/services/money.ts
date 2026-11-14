@@ -1,4 +1,4 @@
-import { CHART, CODES, inventoryAccount } from "../chart";
+import { CHART, CODES, SEQUENCES, inventoryAccount } from "../chart";
 import { toDateInput } from "../dates";
 import { explainBank, parseBankCsv, suggestBankMatches } from "../bank";
 import { lotQty, reliefCents, valueCents } from "../inventory";
@@ -24,28 +24,19 @@ export async function ensureFoundation(actor: Actor): Promise<Result<{ accounts:
         create: { ...account, isExample: true },
       });
     }
-    const sequences = [
-      ["quote", 1001],
-      ["order", 1001],
-      ["delivery", 1001],
-      ["invoice", 1001],
-      ["receipt-pay", 1001],
-      ["po", 1001],
-      ["receipt", 1001],
-      ["bill", 1001],
-      ["vpay", 1001],
-      ["batch", 1001],
-      ["lot", 1001],
-      ["journal", 1001],
-    ] as const;
-    for (const [name, next] of sequences) {
-      await tx.numberSequence.upsert({ where: { name }, update: {}, create: { name, next } });
+    for (const sequence of SEQUENCES) {
+      await tx.numberSequence.upsert({
+        where: { name: sequence.name },
+        update: {},
+        create: { name: sequence.name, next: sequence.start },
+      });
     }
     const locations = [
       ["QC", "Quarantine cage", false],
       ["MAIN", "Main warehouse", true],
       ["DOCK", "Shipping dock", true],
       ["REC", "Receiving floor", false],
+      ["AMAZON", "Amazon FBA", false],
     ] as const;
     for (const [code, name, shippable] of locations) {
       await tx.location.upsert({ where: { code }, update: { name, shippable }, create: { code, name, shippable } });
@@ -84,12 +75,14 @@ export async function postOpening(
     const main = await locationByCode(tx, "MAIN");
     let rawCents = 0;
     let fgCents = 0;
+    let packagingCents = 0;
     for (const line of input.lots) {
       const product = await tx.product.findUnique({ where: { id: line.productId } });
       if (!product?.trackInventory) return err("Opening stock can only be recorded for products we store.");
       if (!(line.qty > 0) || !(line.unitCost > 0)) return err(`${product.name} needs a quantity and a real cost.`);
       const cents = valueCents(line.qty, line.unitCost);
       if (product.kind === "FINISHED") fgCents += cents;
+      else if (product.kind === "PACKAGING") packagingCents += cents;
       else rawCents += cents;
       const lot = await tx.lot.create({
         data: {
@@ -124,7 +117,7 @@ export async function postOpening(
       date: input.date,
       memo: "Opening balances",
       source: "OPENING",
-      lines: openingJournal({ cashCents: input.cashCents, rawCents, fgCents }),
+      lines: openingJournal({ cashCents: input.cashCents, rawCents, fgCents, packagingCents }),
       isExample: input.isExample ?? false,
     });
     if (!journal.ok) return journal;

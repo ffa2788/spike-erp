@@ -1,4 +1,4 @@
-export type CostKind = "RAW" | "FINISHED" | "UTILITY";
+export type CostKind = "RAW" | "FINISHED" | "UTILITY" | "PACKAGING";
 
 export type CostProduct = {
   id: string;

@@ -21,7 +21,33 @@ SPIKE is original software. Other chemical and apparel systems were used only as
 - Peachtree 2011 CSV import with a preview that skips bad rows
 - Sign-in with a password and an authenticator code, four roles, and a change history
 
-Amazon is a file import. It does not call Amazon. A full 16-section safety data sheet is not generated; the label prints the hazard text stored on the product. There is no toll-manufacturing module, no credit note, no landed-cost proration, and no outbound email.
+Amazon uses the Selling Partner API when credentials are set, and a CSV import when they are not. Technical data sheets and 16-section safety data sheets are drafts until a qualified person publishes them. There is no toll-manufacturing module, no credit note, and no outbound email.
+
+## Amazon Selling Partner API
+
+On the Amazon page, SPIKE shows **Not connected** until all of these are set. It does not invent orders or inventory.
+
+1. In Seller Central, open Develop Apps and register a private app for this seller.
+2. Request the roles Inventory and Order Tracking, Amazon Fulfillment, and Finance and Accounting.
+3. Authorize the app. Amazon gives you a Login with Amazon refresh token, plus the client id and client secret from the app.
+4. Create an IAM user that can call Selling Partner API and copy its access key and secret. Requests are signed with those keys.
+5. Set the variables and redeploy:
+
+```
+AMAZON_LWA_CLIENT_ID=
+AMAZON_LWA_CLIENT_SECRET=
+AMAZON_REFRESH_TOKEN=
+AMAZON_SELLER_ID=
+AMAZON_MARKETPLACE_ID=ATVPDKIKX0DER
+AMAZON_AWS_ACCESS_KEY_ID=
+AMAZON_AWS_SECRET_ACCESS_KEY=
+```
+
+`ATVPDKIKX0DER` is the United States marketplace. Pull orders only after the page says connected. Settlement fees are read from Amazon's own reports. The CSV import under Bring in data still works when Amazon is not connected.
+
+## NSF/ANSI/CAN 60
+
+The NSF page stores the trade names and maximum use levels read from NSF's public listing for SPER Chemical (company 42880) on 14 November 2026. The mark is shown on labels, certificates, technical data sheets, and safety data sheets only when a product is linked to one of those trade names. PolyPhos Beads is linked in the example data. Rust Preventer is not. Check https://info.nsf.org/Certified/PwsChemicals/Listings.asp?Company=42880 if NSF changes the list, then update the link. SPIKE does not copy NSF's logo artwork.
 
 ## Example sign-in
 

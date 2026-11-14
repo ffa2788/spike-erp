@@ -1,19 +1,30 @@
 :root {
-  --paper: #f3efe4;
-  --ink: #1a2330;
-  --green: #0d5c45;
-  --green-dark: #08382b;
-  --card: #fffdf8;
-  --line: #d7cdb8;
-  --alert: #8d1d1d;
-  --alert-bg: #f8e4e0;
-  --warn: #8a4b08;
-  --warn-bg: #f8ecd4;
-  --good: #0d5c45;
-  --good-bg: #e5f2ec;
-  --info: #1e4d7b;
-  --info-bg: #e7f0f8;
-  --focus: #e7a317;
+  /* Colors taken from sperchemical.com styles.css on 14 Nov 2026. */
+  --blue-950: #091e36;
+  --blue-900: #0f2b46;
+  --blue-800: #1a3a5c;
+  --blue-700: #1e4d7b;
+  --blue-600: #2563eb;
+  --sky-500: #0ea5e9;
+  --sky-400: #38bdf8;
+  --sky-300: #7dd3fc;
+  --sky-100: #e0f2fe;
+  --sky-50: #f0f9ff;
+  --paper: var(--sky-50);
+  --ink: var(--blue-900);
+  --green: var(--blue-900);
+  --green-dark: var(--blue-950);
+  --card: #ffffff;
+  --line: #cbd5e1;
+  --alert: #c53030;
+  --alert-bg: #fef2f2;
+  --warn: #92400e;
+  --warn-bg: #fef3c7;
+  --good: #276749;
+  --good-bg: #dcfce7;
+  --info: var(--blue-700);
+  --info-bg: var(--sky-100);
+  --focus: var(--sky-500);
 }
 
 * { box-sizing: border-box; }
@@ -22,7 +33,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--paper);
-  font-family: "Avenir Next", "Segoe UI", "Noto Sans", sans-serif;
+  font-family: var(--font-body), "DM Sans", "Segoe UI", sans-serif;
   line-height: 1.45;
 }
 a { color: var(--green-dark); }
@@ -31,7 +42,7 @@ a:hover { color: var(--info); }
 
 .app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
 .nav {
-  background: var(--green-dark);
+  background: var(--blue-900);
   color: #f6f3ea;
   padding: 1.1rem 1rem 2rem;
   display: flex;
@@ -48,7 +59,8 @@ a:hover { color: var(--info); }
 .who strong { display: block; }
 .who span { display: block; font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.6rem; }
 main { padding: 1.4rem 1.6rem 3rem; max-width: 1180px; }
-h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 0.3rem; }
+h1, h2 { font-family: var(--font-display), "DM Serif Display", Georgia, serif; font-weight: 400; }
+h1 { font-size: 2.15rem; line-height: 1.15; margin: 0 0 0.3rem; color: var(--blue-900); }
 h2 { font-size: 1.35rem; margin: 1.4rem 0 0.6rem; }
 .lede { font-size: 1.1rem; margin-top: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 0.7rem; align-items: center; }
@@ -78,14 +90,37 @@ h2 { font-size: 1.35rem; margin: 1.4rem 0 0.6rem; }
   justify-content: center;
   min-height: 52px;
   padding: 0.55rem 1rem;
-  border-radius: 12px;
-  border: 3px solid var(--green-dark);
-  background: var(--green);
+  border-radius: 10px;
+  border: 3px solid var(--blue-950);
+  background: var(--blue-900);
   color: white;
   font-weight: 750;
   text-decoration: none;
   cursor: pointer;
 }
+.choice {
+  min-height: 64px;
+  min-width: 140px;
+  border: 3px solid var(--blue-900);
+  background: white;
+  color: var(--blue-900);
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.choice[aria-pressed="true"], .choice.on { background: var(--blue-900); color: white; }
+.nsf-mark {
+  border: 3px solid var(--blue-900);
+  background: white;
+  padding: 0.7rem 0.9rem;
+  max-width: 280px;
+}
+.nsf-mark strong { display: block; letter-spacing: 0.04em; }
+.brand { flex-direction: column; align-items: flex-start; }
+.brand img { width: 100%; max-width: 230px; height: auto; background: white; border-radius: 8px; padding: 0.4rem 0.55rem; }
+.brand strong { color: white; font-size: 1.35rem; }
+.brand span { color: #7dd3fc; }
 .btn.secondary, button.secondary { background: white; color: var(--ink); border-color: var(--ink); }
 .btn.warn { background: var(--warn); border-color: #5c3204; }
 .nav .btn.secondary { width: 100%; }

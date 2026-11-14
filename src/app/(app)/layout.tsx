@@ -13,13 +13,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="app">
       <aside className="nav">
         <div className="brand">
-          <svg width="42" height="42" viewBox="0 0 64 64" aria-hidden="true">
-            <rect width="64" height="64" rx="14" fill="#f3efe4" />
-            <path d="M32 10c8 10 14 16 14 24a14 14 0 1 1-28 0c0-8 6-14 14-24z" fill="#0d5c45" />
-          </svg>
+          <img src="/brand/logo.png" alt="SPER Chemical Corporation" />
           <div>
             <strong>SPIKE</strong>
-            <span>SPER Chemical</span>
+            <span>Sales, planning, inventory</span>
           </div>
         </div>
         <SideNav />

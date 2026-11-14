@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { NsfMark } from "@/components/nsf-mark";
 import { PrintButton } from "@/components/print-button";
 import { prisma } from "@/lib/db";
 import { formatDate, formatQty } from "@/lib/format";
@@ -11,7 +12,7 @@ export default async function PrintCertificate({ params }: { params: Promise<{ i
   const { id } = await params;
   const lot = await prisma.lot.findUnique({
     where: { id },
-    include: { product: true, qcResults: true, outputOf: { include: { consumptions: { include: { lot: { include: { product: true } } } } } } },
+    include: { product: { include: { nsfListing: true } }, qcResults: true, outputOf: { include: { consumptions: { include: { lot: { include: { product: true } } } } } } },
   });
   const company = await prisma.companyProfile.findUnique({ where: { id: "company" } });
   const stock = await currentStock();
@@ -27,10 +28,8 @@ export default async function PrintCertificate({ params }: { params: Promise<{ i
       <p>Product {lot.product.name}. Lot {lot.lotNumber}. Quantity on hand {formatQty(balance ? lotQty(balance) : 0, lot.product.unit)}.</p>
       <p>Date {formatDate(lot.manufacturedOn ?? lot.receivedOn)}. Formula version {lot.formulaVersion ?? "—"}.</p>
       {!released && <p><strong>This lot is not released. Do not use this certificate for a shipment.</strong></p>}
-      {released && lot.nsfEligible && (
-        <p>NSF/ANSI 60 claim: {lot.product.nsfClaim} Certificate {lot.product.nsfCertNumber}, through {formatDate(lot.product.nsfExpiresOn)}.</p>
-      )}
-      {released && !lot.nsfEligible && <p>This lot does not carry an NSF/ANSI 60 claim.</p>}
+      {released && <NsfMark listing={lot.product.nsfListing} />}
+      {released && !lot.product.nsfListing && <p>This product is not on the NSF public listing, so this certificate does not carry the NSF mark.</p>}
       <h2>Quality results</h2>
       {lot.qcResults.length === 0 && <p>No results recorded.</p>}
       <ul>{lot.qcResults.map((result) => <li key={result.id}>{result.parameter}: {Number(result.value)} {result.unit} ({result.passed ? "pass" : "fail"})</li>)}</ul>

@@ -12,6 +12,7 @@ const groups = [
     label: "Work",
     links: [
       { href: "/sales", label: "Sales" },
+      { href: "/sales/amazon", label: "Amazon" },
       { href: "/purchasing", label: "Purchasing" },
       { href: "/production", label: "Production" },
       { href: "/inventory", label: "Inventory" },
@@ -24,6 +25,7 @@ const groups = [
       { href: "/customers", label: "Customers" },
       { href: "/vendors", label: "Suppliers" },
       { href: "/products", label: "Products" },
+      { href: "/documents", label: "TDS and SDS" },
     ],
   },
   {
@@ -38,6 +40,7 @@ const groups = [
     label: "Setup",
     links: [
       { href: "/import", label: "Bring in data" },
+      { href: "/settings/nsf", label: "NSF listing" },
       { href: "/settings", label: "Settings" },
     ],
   },
