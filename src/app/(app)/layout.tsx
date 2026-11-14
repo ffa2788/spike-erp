@@ -29,10 +29,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main>
-        <form className="no-print" action="/search" style={{ marginBottom: "1rem" }}>
-          <label className="field">Find an invoice, order, or marketplace number
-            <input name="q" placeholder="S-000001 or an Amazon order id" />
-          </label>
+        <form className="searchbar no-print" action="/search">
+          <input name="q" placeholder="Search S-000001, a quote, or a marketplace order" aria-label="Search invoices, orders, and marketplace numbers" />
           <button className="btn secondary" type="submit">Search</button>
         </form>
         {company?.showExampleBanner && (
