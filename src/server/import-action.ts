@@ -1,0 +1,77 @@
+"use server";
+
+import { parseCsv } from "@/lib/csv";
+import { prisma } from "@/lib/db";
+import { validateAmazonOrders } from "@/lib/amazon";
+import { detectKind, validateAccounts, validateCustomers, validateItems, validateJournal } from "@/lib/peachtree";
+import { commitAmazon, commitPeachtree } from "@/lib/services/importers";
+import { requireCan } from "./actor";
+
+export type PeachtreeState = {
+  error?: string;
+  notice?: string;
+  kind: string;
+  csv?: string;
+  ready: number;
+  skipped: number;
+  rows: { rowNumber: number; status: string; summary: string; messages: string[] }[];
+};
+
+export async function peachtreeAction(_prev: PeachtreeState, formData: FormData): Promise<PeachtreeState> {
+  const actor = await requireCan("importData");
+  const file = formData.get("file");
+  const pasted = String(formData.get("csv") ?? "");
+  const csv = file instanceof File && file.size > 0 ? await file.text() : pasted;
+  const requested = String(formData.get("kind") ?? "");
+  if (!csv.trim()) return { ..._prev, error: "Choose a file or paste the rows.", rows: [] };
+  if (csv.length > 2_000_000) return { ..._prev, error: "That file is too large.", rows: [] };
+  if (requested === "amazon") {
+    if (formData.get("commit") === "yes") {
+      const result = await commitAmazon(actor, csv);
+      if (!result.ok) return { kind: "amazon", csv, ready: 0, skipped: 0, rows: [], error: result.error };
+      return { kind: "amazon", csv: "", ready: result.value.invoices, skipped: 0, rows: [], notice: `Imported ${result.value.invoices} Amazon orders.` };
+    }
+    const products = await prisma.product.findMany();
+    const preview = validateAmazonOrders(parseCsv(csv).rows, products.map((product) => ({
+      sku: product.sku, sellable: product.sellable, priceStatus: product.priceStatus,
+    })));
+    return {
+      kind: "amazon",
+      csv,
+      ready: preview.ready.length,
+      skipped: preview.rows.length - preview.ready.length,
+      rows: preview.rows.map((row) => ({ rowNumber: row.rowNumber, status: row.status, summary: row.summary, messages: row.messages })),
+    };
+  }
+  const table = parseCsv(csv);
+  const kind = requested || detectKind(table.headers) || "";
+  if (!kind) return { kind: "", csv, ready: 0, skipped: 0, rows: [], error: "SPIKE could not tell what kind of file this is. Choose one." };
+  if (formData.get("commit") === "yes") {
+    const result = await commitPeachtree(actor, csv, kind);
+    if (!result.ok) return { kind, csv, ready: 0, skipped: 0, rows: [], error: result.error };
+    return { kind, csv: "", ready: result.value.saved, skipped: result.value.skipped, rows: [], notice: `Imported ${result.value.saved} rows. Skipped ${result.value.skipped}.` };
+  }
+  const keys = {
+    partyCodes: (await prisma.party.findMany()).map((party) => party.code),
+    partyNames: (await prisma.party.findMany()).map((party) => party.nameKey),
+    skus: (await prisma.product.findMany()).map((product) => product.sku),
+    productNames: (await prisma.product.findMany()).map((product) => product.nameKey),
+    accountCodes: (await prisma.account.findMany()).map((account) => account.code),
+  };
+  const preview = kind === "customers" || kind === "vendors"
+    ? validateCustomers(table.rows, keys, kind === "vendors")
+    : kind === "items"
+      ? validateItems(table.rows, keys)
+      : kind === "accounts"
+        ? validateAccounts(table.rows, keys)
+        : validateJournal(table.rows, keys);
+  const rows = "rows" in preview ? preview.rows : [];
+  const ready = "ready" in preview ? preview.ready.length : 0;
+  return {
+    kind,
+    csv,
+    ready,
+    skipped: rows.length - ready,
+    rows: rows.map((row) => ({ rowNumber: row.rowNumber, status: row.status, summary: row.summary, messages: row.messages })),
+  };
+}

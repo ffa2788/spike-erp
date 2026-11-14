@@ -1,0 +1,5 @@
+Date,Reference,Account ID,Description,Debit,Credit
+11/02/2026,OK-1,6200,Example bank fee,5.00,
+11/02/2026,OK-1,1000,Example bank fee,,5.00
+11/02/2026,BAD-1,6200,Unbalanced,5.00,
+11/02/2026,BAD-1,1000,Unbalanced,,4.00

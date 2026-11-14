@@ -1,0 +1,3 @@
+Item ID,Item Description,Sales Price,Cost,Kind,Unit
+PT-ITEM,Example phosphate blend,4.50,1.10,finished,lb
+PT-FAKE,Placeholder price item,1.00,0.40,finished,lb
