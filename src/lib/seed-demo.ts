@@ -46,7 +46,8 @@ export async function wipeDatabase() {
       "QcResult", "Movement", "Lot", "FormulaLine", "Formula", "QualitySpec",
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
-      "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast",
+      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
       "AuditLog", "LoginAttempt", "CompanyProfile", "User"
     RESTART IDENTITY CASCADE
   `);
@@ -616,6 +617,10 @@ export async function seedDemo() {
   );
   await prisma.party.update({ where: { id: gulf }, data: { priceLevel: "DISTRIBUTOR" } });
   await prisma.alertRecipient.create({ data: { email: "marlon@novachem.hn", isExample: true } });
+  const gallon = await prisma.product.findUnique({ where: { sku: "POLY-LIQ-1G" } });
+  if (gallon) {
+    await prisma.fbaBalance.create({ data: { productId: gallon.id, fulfillable: 6, inbound: 4, source: "MANUAL" } });
+  }
   await prisma.product.update({ where: { id: soda }, data: { safetyQty: 500, moq: 1000, orderMultiple: 500 } });
   await prisma.priceBreak.createMany({
     data: [

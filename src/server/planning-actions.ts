@@ -3,6 +3,8 @@
 import { parseDateInput } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import { convertPlan, dispatchStockAlerts } from "@/lib/services/mrp-run";
+import { buildSchedule, emailSchedule, releaseSchedule } from "@/lib/services/schedule-run";
+import { parseFbaPosition } from "@/lib/amazon-sp";
 import { requireCan } from "./actor";
 import { fail, succeed } from "./http";
 
@@ -65,4 +67,53 @@ export async function sendAlertsNow() {
     fail("/planning/coverage", `Email is not configured. Missing ${result.missing.join(", ")}.`);
   }
   succeed("/planning/coverage", result.sent ? `Sent ${result.sent} stock email${result.sent === 1 ? "" : "s"}.` : "No new low-stock emails. Nothing changed status.");
+}
+
+export async function saveFbaStock(formData: FormData) {
+  await requireCan("editMasters");
+  const parsed = parseFbaPosition(text(formData, "csv"));
+  if (parsed.length === 0) fail("/planning/schedule", "Paste rows with sku, fulfillable, and inbound. Nothing was saved.");
+  let saved = 0;
+  for (const row of parsed) {
+    const product = await prisma.product.findFirst({ where: { sku: row.sku.toUpperCase() } });
+    if (!product) continue;
+    await prisma.fbaBalance.upsert({
+      where: { productId: product.id },
+      update: { fulfillable: row.fulfillable, inbound: row.inbound, source: "CSV" },
+      create: { productId: product.id, fulfillable: row.fulfillable, inbound: row.inbound, source: "CSV" },
+    });
+    saved += 1;
+  }
+  if (saved === 0) fail("/planning/schedule", "None of those SKUs are in SPIKE. Nothing was saved.");
+  succeed("/planning/schedule", `Saved FBA quantities for ${saved} SKU${saved === 1 ? "" : "s"}.`);
+}
+
+export async function releaseToTrevor(formData: FormData) {
+  const actor = await requireCan("produce");
+  const weeks = Number(text(formData, "weeks") || "8");
+  const built = await buildSchedule(undefined, weeks);
+  const lines = built.rows.map((row) => {
+    const qty = Number(text(formData, `qty-${row.id}`));
+    const fba = Number(text(formData, `fba-${row.id}`));
+    const due = text(formData, `day-${row.id}`) || row.dueOn;
+    const suggested = Number.isFinite(qty) && qty >= 0 ? qty : row.suggested;
+    const materials = row.materials.map((material) => {
+      const need = Math.round(material.perUnit * suggested * 10000) / 10000;
+      const short = Math.max(0, Math.round((need - material.onHand) * 10000) / 10000);
+      return { ...material, qty: need, short };
+    });
+    return {
+      ...row,
+      suggested,
+      fbaReplenish: Number.isFinite(fba) && fba >= 0 ? fba : row.fbaReplenish,
+      dueOn: due,
+      materials,
+      shortage: materials.some((material) => material.short > 0),
+    };
+  });
+  const released = await releaseSchedule(actor, { asOf: built.asOf, windowWeeks: built.weeks, emailTo: text(formData, "emailTo"), lines });
+  if (!released.ok) fail("/planning/schedule", released.error);
+  const emailTo = text(formData, "emailTo");
+  if (emailTo) await emailSchedule(released.value.id, emailTo);
+  succeed(`/planning/schedule/${released.value.id}`, emailTo ? "Released to Trevor. The work list is ready to print." : "Released to Trevor.");
 }

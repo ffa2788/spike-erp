@@ -274,6 +274,7 @@ model Product {
   maxQty            Decimal     @default(0) @db.Decimal(18, 4)
   moq               Decimal     @default(0) @db.Decimal(18, 4)
   orderMultiple     Decimal     @default(0) @db.Decimal(18, 4)
+  coverDays         Int         @default(14)
   shelfLifeDays     Int?
   pack              String      @default("")
   casNumber         String      @default("")
@@ -907,6 +908,44 @@ model FixedAsset {
   section179Candidate Boolean  @default(true)
   notes               String   @default("")
   isExample           Boolean  @default(false)
+}
+
+model FbaBalance {
+  productId    String   @id
+  fulfillable  Decimal  @default(0) @db.Decimal(18, 4)
+  inbound      Decimal  @default(0) @db.Decimal(18, 4)
+  source       String   @default("MANUAL")
+  updatedAt    DateTime @updatedAt
+}
+
+model ScheduleRelease {
+  id         String   @id @default(cuid())
+  number     String   @unique
+  weekOf     DateTime
+  windowWeeks Int
+  notes      String   @default("")
+  emailedTo  String   @default("")
+  createdAt  DateTime @default(now())
+  lines      ScheduleReleaseLine[]
+}
+
+model ScheduleReleaseLine {
+  id             String           @id @default(cuid())
+  releaseId      String
+  release        ScheduleRelease  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  productId      String
+  sku            String
+  name           String
+  packageLabel   String
+  qty            Decimal          @db.Decimal(18, 4)
+  fbaQty         Decimal          @default(0) @db.Decimal(18, 4)
+  unit           String
+  dueOn          DateTime
+  formulaVersion Int?
+  pullLot        String           @default("")
+  materials      String           @default("")
+  daysCover      Decimal?         @db.Decimal(18, 4)
+  shortage       Boolean          @default(false)
 }
 
 model DemandForecast {

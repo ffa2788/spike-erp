@@ -26,7 +26,10 @@ export default async function PlanningPage({
         Quarantine is not available.
       </p>
       <Flash error={query.error} notice={query.notice} />
-      <p><Link className="btn secondary" href="/planning/coverage">Coverage</Link></p>
+      <p>
+        <Link className="btn secondary" href="/planning/coverage">Coverage</Link>{" "}
+        <Link className="btn secondary" href="/planning/schedule">Suggested week for Trevor</Link>
+      </p>
       <h2>Planned orders</h2>
       <form action={convertPlanAction}>
         <button className="btn" type="submit">Create the purchase orders and batches</button>

@@ -109,18 +109,27 @@ export function parseOrdersPayload(body: string): SpOrder[] {
 }
 
 export function parseFbaInventory(tsv: string): { sku: string; available: number }[] {
+  return parseFbaPosition(tsv).map((row) => ({ sku: row.sku, available: row.fulfillable }));
+}
+
+/** Fulfillable quantity plus inbound working, shipped, and receiving. */
+export function parseFbaPosition(tsv: string): { sku: string; fulfillable: number; inbound: number }[] {
   const lines = tsv.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split("\t").map((cell) => cell.trim().toLowerCase());
+  const headers = lines[0].split(/[\t,]/).map((cell) => cell.trim().toLowerCase());
   const skuIndex = headers.findIndex((header) => header === "seller-sku" || header === "sku");
-  const qtyIndex = headers.findIndex((header) => header.includes("quantity"));
-  if (skuIndex < 0 || qtyIndex < 0) return [];
+  const fulfillableIndex = headers.findIndex((header) => header.includes("fulfillable") || header === "quantity available" || header === "quantity");
+  const inboundIndexes = headers
+    .map((header, index) => (header.includes("inbound") ? index : -1))
+    .filter((index) => index >= 0);
+  if (skuIndex < 0 || fulfillableIndex < 0) return [];
   return lines.slice(1).flatMap((line) => {
-    const cells = line.split("\t");
+    const cells = line.split(/[\t,]/);
     const sku = cells[skuIndex]?.trim();
-    const available = Number(cells[qtyIndex] ?? "");
-    if (!sku || !Number.isFinite(available)) return [];
-    return [{ sku, available }];
+    const fulfillable = Number(cells[fulfillableIndex] ?? "");
+    if (!sku || !Number.isFinite(fulfillable)) return [];
+    const inbound = inboundIndexes.reduce((sum, index) => sum + (Number(cells[index]) || 0), 0);
+    return [{ sku, fulfillable, inbound }];
   });
 }
 

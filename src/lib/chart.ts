@@ -77,4 +77,5 @@ export const SEQUENCES: { name: string; prefix: string; start: number }[] = [
   { name: "pack", prefix: "PK", start: 1001 },
   { name: "doc", prefix: "DOC", start: 1001 },
   { name: "numtest", prefix: "T", start: 1 },
+  { name: "schedule", prefix: "WK", start: 1001 },
 ];
