@@ -6,7 +6,7 @@ tsconfig.tsbuildinfo
 .env.local
 *.log
 dist
-coverage
+/coverage
 .DS_Store
 prisma/*.db
 prisma/*.db-journal
