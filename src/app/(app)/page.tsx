@@ -7,6 +7,7 @@ import { usd, formatDate, formatQty } from "@/lib/format";
 import { rollUpCost } from "@/lib/costing";
 import { lotQty, stockBuckets } from "@/lib/inventory";
 import { reorderSuggestion } from "@/lib/planning";
+import { buildPlan } from "@/lib/services/mrp-run";
 import { assessBooks, currentStock } from "@/lib/read-models";
 import { buildSalesReport } from "@/lib/sales-report";
 import { bankPosition } from "@/lib/services/money";
@@ -39,6 +40,9 @@ export default async function HomePage({
     where: { issuedOn: { gte: new Date(`${monthStart}T00:00:00Z`), lte: new Date(`${today}T23:59:59Z`) } },
     include: { lines: true, party: true },
   });
+  const materialPlan = await buildPlan(today);
+  const critical = materialPlan.coverage.filter((row) => row.status === "CRITICAL").length;
+  const low = materialPlan.coverage.filter((row) => row.status === "LOW").length;
   const sales = buildSalesReport(monthInvoices.map((invoice) => ({
     id: invoice.id,
     number: invoice.number,
@@ -150,6 +154,7 @@ export default async function HomePage({
         <div className="card"><span>Inventory</span><strong>{usd(books.inventoryLots)}</strong></div>
         <div className="card"><span>Sales this month</span><strong>{usd(sales.subtotalCents)}</strong></div>
         <div className="card"><span>Margin this month</span><strong>{usd(sales.marginCents)}</strong></div>
+        <Link className="card" href="/planning/coverage"><span>Coverage</span><strong>{critical} critical, {low} low</strong></Link>
       </div>
       <h2>What needs attention</h2>
       {attention.length === 0 ? <p>Nothing is waiting on you today.</p> : (

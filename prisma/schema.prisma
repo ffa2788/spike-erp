@@ -202,6 +202,8 @@ model CompanyProfile {
   nsfNote           String
   showExampleBanner Boolean    @default(false)
   entityType        EntityType @default(S_CORP)
+  emailDigest       Boolean    @default(false)
+  lastDigestOn      DateTime?
 }
 
 model Party {
@@ -268,6 +270,10 @@ model Product {
   taxable           Boolean     @default(true)
   trackInventory    Boolean     @default(true)
   minQty            Decimal     @default(0) @db.Decimal(18, 4)
+  safetyQty         Decimal     @default(0) @db.Decimal(18, 4)
+  maxQty            Decimal     @default(0) @db.Decimal(18, 4)
+  moq               Decimal     @default(0) @db.Decimal(18, 4)
+  orderMultiple     Decimal     @default(0) @db.Decimal(18, 4)
   shelfLifeDays     Int?
   pack              String      @default("")
   casNumber         String      @default("")
@@ -304,6 +310,7 @@ model Product {
 
   formulas         Formula[]
   priceBreaks      PriceBreak[]
+  forecasts        DemandForecast[]
   formulaLines     FormulaLine[]
   specs            QualitySpec[]
   lots             Lot[]
@@ -900,6 +907,42 @@ model FixedAsset {
   section179Candidate Boolean  @default(true)
   notes               String   @default("")
   isExample           Boolean  @default(false)
+}
+
+model DemandForecast {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel   String
+  weekOf    DateTime
+  qty       Decimal  @db.Decimal(18, 4)
+  isExample Boolean  @default(false)
+
+  @@unique([productId, channel, weekOf])
+}
+
+model AlertRecipient {
+  id        String  @id @default(cuid())
+  email     String
+  productId String?
+  category  String  @default("")
+  isExample Boolean @default(false)
+}
+
+model StockAlert {
+  productId  String      @id
+  status     String
+  emailedOn  DateTime?
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  toAddress String
+  subject   String
+  body      String
+  status    String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
 }
 
 model ImportBatch {

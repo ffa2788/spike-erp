@@ -18,6 +18,7 @@ const groups = [
       { href: "/production", label: "Production" },
       { href: "/inventory", label: "Inventory" },
       { href: "/planning", label: "Planning" },
+      { href: "/planning/coverage", label: "Coverage" },
     ],
   },
   {
