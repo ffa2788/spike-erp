@@ -333,6 +333,13 @@ export async function savePartyAction(formData: FormData) {
     leadTimeDays: text(formData, "leadTimeDays") ? Number(text(formData, "leadTimeDays")) : null,
     notes: text(formData, "notes"),
     active: formData.get("active") !== "no",
+    ...(kind === "vendors"
+      ? {
+          w9OnFile: formData.get("w9OnFile") === "yes",
+          w9ReceivedOn: text(formData, "w9ReceivedOn") ? day(formData, "w9ReceivedOn", back) : null,
+          infoReturn: (["NONE", "NEC", "MISC"].includes(text(formData, "infoReturn")) ? text(formData, "infoReturn") : "NONE") as "NONE" | "NEC" | "MISC",
+        }
+      : {}),
   });
   if (!result.ok) fail(back, result.error);
   finish(back, result, "Saved.", `/${kind}/${result.value.id}`);

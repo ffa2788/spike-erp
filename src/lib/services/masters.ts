@@ -35,6 +35,9 @@ export type PartyInput = {
   notes: string;
   active: boolean;
   isExample?: boolean;
+  w9OnFile?: boolean;
+  w9ReceivedOn?: Date | null;
+  infoReturn?: "NONE" | "NEC" | "MISC";
 };
 
 function stateProblem(label: string, value: string): string | null {
@@ -101,6 +104,9 @@ export async function savePartyTx(tx: Tx, actor: Actor, input: PartyInput): Prom
     notes: input.notes.trim(),
     active: input.active,
     isExample: input.isExample ?? false,
+    ...(input.w9OnFile === undefined
+      ? {}
+      : { w9OnFile: input.w9OnFile, w9ReceivedOn: input.w9ReceivedOn ?? null, infoReturn: input.infoReturn ?? "NONE" }),
   };
   const saved = input.id
     ? await tx.party.update({ where: { id: input.id }, data })

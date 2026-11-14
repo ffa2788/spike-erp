@@ -35,6 +35,20 @@ export default async function VendorPage({
         <label className="field">State<input name="billState" defaultValue={party.billState} /></label>
         <label className="field">Terms<input name="paymentTermsDays" defaultValue={String(party.paymentTermsDays)} /></label>
         <label className="field">Lead time<input name="leadTimeDays" defaultValue={party.leadTimeDays ?? ""} /></label>
+        <label className="field">Form W-9
+          <select name="w9OnFile" defaultValue={party.w9OnFile ? "yes" : "no"}>
+            <option value="no">Not on file</option>
+            <option value="yes">On file</option>
+          </select>
+        </label>
+        <label className="field">W-9 date<input type="date" name="w9ReceivedOn" defaultValue={party.w9ReceivedOn ? party.w9ReceivedOn.toISOString().slice(0, 10) : ""} /></label>
+        <label className="field">1099
+          <select name="infoReturn" defaultValue={party.infoReturn}>
+            <option value="NONE">No 1099 — goods or a corporation</option>
+            <option value="NEC">1099-NEC — services</option>
+            <option value="MISC">1099-MISC — rent and other</option>
+          </select>
+        </label>
         <label className="field">Notes<textarea name="notes" defaultValue={party.notes} /></label>
         <label className="field"><input type="checkbox" name="isCustomer" value="yes" defaultChecked={party.isCustomer} /> Also a customer</label>
         <button className="btn" type="submit">Save</button>

@@ -16,7 +16,7 @@ export default function ReportsPage() {
   return (
     <>
       <h1>Reports</h1>
-      <p className="lede">Each report reads the same records as the Today page. Print any of them.</p>
+      <p className="lede">Each report reads the same records as the Today page. Print any of them. The <Link href="/tax">Tax Center</Link> is the year-end package for your CPA.</p>
       <div className="attention">
         {reports.map(([slug, title, detail]) => (
           <Link key={slug} href={`/reports/${slug}`}>

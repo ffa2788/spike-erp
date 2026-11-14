@@ -34,6 +34,7 @@ const groups = [
       { href: "/money", label: "Money" },
       { href: "/money/reconcile", label: "Check the bank" },
       { href: "/reports", label: "Reports" },
+      { href: "/tax", label: "Tax Center" },
     ],
   },
   {

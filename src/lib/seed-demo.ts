@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { CODES } from "./chart";
 import { dateFromParts } from "./dates";
 import { DEMO_PASSWORD, DEMO_USERS } from "./demo-auth";
 import { prisma } from "./db";
@@ -8,6 +9,7 @@ import { generateDocument } from "./services/documents";
 import {
   ensureFoundation,
   importBankStatement,
+  postManualJournal,
   postOpening,
   recordOpeningStatement,
 } from "./services/money";
@@ -44,7 +46,7 @@ export async function wipeDatabase() {
       "QcResult", "Movement", "Lot", "FormulaLine", "Formula", "QualitySpec",
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
-      "ImportBatch", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "ImportBatch", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
       "AuditLog", "LoginAttempt", "CompanyProfile", "User"
     RESTART IDENTITY CASCADE
   `);
@@ -69,6 +71,7 @@ export async function seedDemo() {
   await prisma.companyProfile.create({
     data: {
       legalName: "SPER Chemical",
+      entityType: "S_CORP",
       address: "100 Example Way",
       city: "Clearwater",
       state: "FL",
@@ -224,8 +227,11 @@ export async function seedDemo() {
     exemptionState: "",
     exemptionExpires: null,
     leadTimeDays: 14,
-    notes: "Example raw-material supplier.",
+    notes: "Example raw-material supplier. W-9 is on file. Paid for goods, so no 1099.",
     active: true,
+    w9OnFile: true,
+    w9ReceivedOn: day("2024-02-01"),
+    infoReturn: "NONE",
   });
   const caustic = await customer({
     code: "CAUSTIC",
@@ -252,8 +258,10 @@ export async function seedDemo() {
     exemptionState: "",
     exemptionExpires: null,
     leadTimeDays: 10,
-    notes: "Example caustic supplier.",
+    notes: "Example repair-and-supply vendor. W-9 is not on file.",
     active: true,
+    w9OnFile: false,
+    infoReturn: "NEC",
   });
 
   const product = async (input: Parameters<typeof saveProduct>[1]) =>
@@ -614,4 +622,26 @@ export async function seedDemo() {
     }),
     "bank import",
   );
+
+  must(
+    await postManualJournal(actor, {
+      date: day("2026-10-15"),
+      memo: "Example tote filler the owners put into the company. Not a real purchase.",
+      lines: [
+        { accountCode: CODES.equipment, debitCents: 850_000, creditCents: 0, memo: "Example tote filler" },
+        { accountCode: CODES.equity, debitCents: 0, creditCents: 850_000, memo: "Example equipment contributed" },
+      ],
+    }),
+    "equipment",
+  );
+  await prisma.fixedAsset.create({
+    data: {
+      description: "Example tote filler",
+      placedInService: day("2026-10-15"),
+      costCents: 850_000,
+      section179Candidate: true,
+      notes: "Example equipment. Not a real purchase.",
+      isExample: true,
+    },
+  });
 }
