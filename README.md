@@ -25,6 +25,10 @@ SPIKE is original software. Other chemical and apparel systems were used only as
 
 Amazon uses the Selling Partner API when credentials are set, and a CSV import when they are not. Technical data sheets and 16-section safety data sheets are drafts until a qualified person publishes them. There is no toll-manufacturing module, no credit note, and no outbound email.
 
+## Stock alert email
+
+Coverage shows **Email is not configured** until `SPIKE_EMAIL_FROM` and `SPIKE_EMAIL_PROVIDER` are set. Use `resend` with `RESEND_API_KEY`, or `postmark` with `POSTMARK_SERVER_TOKEN`. SMTP needs `SMTP_HOST`. Amazon SES needs `SPIKE_SES_REGION`. The example recipient is marlon@novachem.hn. A Low or Critical item emails once per status change. Turn on the daily digest on the Coverage page to send one note per day instead. Every send is written to the email log.
+
 ## Amazon Selling Partner API
 
 On the Amazon page, SPIKE shows **Not connected** until all of these are set. It does not invent orders or inventory.
