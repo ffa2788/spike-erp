@@ -854,6 +854,70 @@ export async function createAmazonSale(
   });
 }
 
+export async function postAmazonHistoryInvoice(
+  actor: Actor,
+  input: {
+    partyId: string;
+    orderId: string;
+    date: Date;
+    shipTo: string;
+    lines: { productId: string; description: string; qty: number; netCents: number }[];
+  },
+): Promise<Result<{ invoiceId: string; number: string }>> {
+  const denied = deny(actor, "importData");
+  if (denied) return denied;
+  if (input.lines.length === 0) return err("This Amazon order has no lines to invoice.");
+  return run(async (tx) => {
+    const existing = await tx.invoice.findFirst({
+      where: { channel: "AMAZON", marketplaceOrderId: input.orderId, status: { not: "VOID" } },
+    });
+    if (existing) return ok({ invoiceId: existing.id, number: existing.number });
+    const priced = input.lines.map((line) => {
+      const unitPriceCents = line.qty > 0 ? Math.round(line.netCents / line.qty) : line.netCents;
+      return { ...line, unitPriceCents, extended: unitPriceCents * line.qty };
+    });
+    const subtotalCents = priced.reduce((sum, line) => sum + line.extended, 0);
+    if (subtotalCents <= 0) return err(`Amazon order ${input.orderId} has no revenue to record.`);
+    const invoice = await tx.invoice.create({
+      data: {
+        number: await nextNumber(tx, invoiceSequenceName("AMAZON")),
+        partyId: input.partyId,
+        issuedOn: input.date,
+        dueOn: input.date,
+        status: "OPEN",
+        subtotalCents,
+        taxCents: 0,
+        totalCents: subtotalCents,
+        balanceCents: subtotalCents,
+        goodsNetCents: subtotalCents,
+        channel: "AMAZON",
+        marketplaceOrderId: input.orderId,
+        currency: "USD",
+        notes: `Amazon All Orders import. ${input.shipTo}. Amazon collected any sales tax. No lot was relieved.`,
+        lines: {
+          create: priced.map((line) => ({
+            productId: line.productId,
+            description: line.description,
+            qty: line.qty,
+            unitPriceCents: line.unitPriceCents,
+            taxable: false,
+          })),
+        },
+      },
+    });
+    const journal = await postJournal(tx, actor, {
+      date: input.date,
+      memo: `Amazon ${input.orderId} ${invoice.number}`,
+      source: "INVOICE",
+      sourceId: invoice.id,
+      lines: salesJournal({ subtotalCents, taxCents: 0, totalCents: subtotalCents }),
+    });
+    if (!journal.ok) return journal;
+    await tx.invoice.update({ where: { id: invoice.id }, data: { salesJournalId: journal.value } });
+    return ok({ invoiceId: invoice.id, number: invoice.number });
+  });
+}
+
 export async function reviseQuote(actor: Actor, quoteId: string): Promise<Result<{ id: string }>> {
   const denied = deny(actor, "sell");
   if (denied) return denied;

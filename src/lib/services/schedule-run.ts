@@ -14,7 +14,7 @@ export async function buildSchedule(asOf = toDateInput(new Date()), windowWeeks 
   const weeks = Math.min(52, Math.max(1, windowWeeks));
   const windowDays = weeks * 7;
   const start = addDaysIso(asOf, -windowDays);
-  const [products, formulas, packages, lines, orderLines, batches, fba, stock] = await Promise.all([
+  const [products, formulas, packages, lines, orderLines, batches, fba, stock, amazonOpen] = await Promise.all([
     prisma.product.findMany({ where: { active: true } }),
     prisma.formula.findMany({ where: { isDefault: true }, include: { lines: { include: { ingredient: true } } } }),
     prisma.packagedSku.findMany({ include: { lines: { include: { material: true } }, product: true, outputProduct: true } }),
@@ -29,6 +29,7 @@ export async function buildSchedule(asOf = toDateInput(new Date()), windowWeeks 
     prisma.productionBatch.findMany({ where: { status: { in: ["PLANNED", "IN_PROCESS"] } } }),
     prisma.fbaBalance.findMany(),
     currentStock(),
+    prisma.amazonOrderItem.findMany({ where: { shipped: false, cancelled: false, productId: { not: null } } }),
   ]);
   const packagedOutputs = new Set(packages.map((row) => row.outputProductId));
   const onHand = (id: string) => stockBuckets(stock, id, asOf).available;
@@ -42,10 +43,15 @@ export async function buildSchedule(asOf = toDateInput(new Date()), windowWeeks 
     for (const row of rows) byChannel[channelOf(row.invoice.channel)] += Number(row.qty);
     return { total: byChannel.S + byChannel.A + byChannel.W, byChannel };
   };
-  const openOf = (id: string, amazonOnly: boolean) =>
-    orderLines
+  const openOf = (id: string, amazonOnly: boolean) => {
+    const fromOrders = orderLines
       .filter((line) => line.productId === id && (!amazonOnly || line.order.party.channel === "AMAZON"))
       .reduce((sum, line) => sum + Math.max(0, Number(line.qty) - line.deliveryLines.reduce((qty, row) => qty + Number(row.qty), 0)), 0);
+    const fromAmazon = amazonOpen
+      .filter((line) => line.productId === id)
+      .reduce((sum, line) => sum + Number(line.qty), 0);
+    return fromOrders + fromAmazon;
+  };
   const wipOf = (id: string) => batches.filter((batch) => batch.productId === id).reduce((sum, batch) => sum + Number(batch.plannedQty), 0);
   const fbaOf = (id: string) => fba.find((row) => row.productId === id);
 

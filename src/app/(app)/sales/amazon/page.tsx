@@ -39,7 +39,8 @@ export default async function AmazonPage({
           <form action={pullFbaInventory}><button className="btn secondary" type="submit">Read the latest FBA inventory report</button></form>
         </div>
       )}
-      <p><Link href="/import">Use the CSV fallback instead</Link></p>
+      <p><Link className="btn" href="/sales/amazon/import">Upload Seller Central reports</Link></p>
+      <p><Link href="/import">Use the simple CSV fallback instead</Link></p>
     </>
   );
 }

@@ -312,6 +312,7 @@ model Product {
   formulas         Formula[]
   priceBreaks      PriceBreak[]
   forecasts        DemandForecast[]
+  amazonSkuMaps    AmazonSkuMap[]
   formulaLines     FormulaLine[]
   specs            QualitySpec[]
   lots             Lot[]
@@ -911,11 +912,50 @@ model FixedAsset {
 }
 
 model FbaBalance {
-  productId    String   @id
-  fulfillable  Decimal  @default(0) @db.Decimal(18, 4)
-  inbound      Decimal  @default(0) @db.Decimal(18, 4)
-  source       String   @default("MANUAL")
-  updatedAt    DateTime @updatedAt
+  productId      String   @id
+  fulfillable    Decimal  @default(0) @db.Decimal(18, 4)
+  inbound        Decimal  @default(0) @db.Decimal(18, 4)
+  unfulfillable  Decimal  @default(0) @db.Decimal(18, 4)
+  reserved       Decimal  @default(0) @db.Decimal(18, 4)
+  shipped30      Decimal  @default(0) @db.Decimal(18, 4)
+  daysOfSupply   Decimal? @db.Decimal(18, 4)
+  source         String   @default("MANUAL")
+  updatedAt      DateTime @updatedAt
+}
+
+model AmazonSkuMap {
+  id         String   @id @default(cuid())
+  amazonSku  String   @unique
+  asin       String   @default("")
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id])
+}
+
+model AmazonOrderItem {
+  id              String   @id @default(cuid())
+  amazonOrderId   String
+  orderItemId     String
+  purchaseDate    DateTime
+  lastUpdated     String   @default("")
+  orderStatus     String   @default("")
+  fulfillment     String   @default("")
+  sku             String   @default("")
+  asin            String   @default("")
+  productName     String   @default("")
+  qty             Decimal  @db.Decimal(18, 4)
+  netCents        Int      @default(0)
+  currency        String   @default("USD")
+  shipCity        String   @default("")
+  shipState       String   @default("")
+  shipPostalCode  String   @default("")
+  shipCountry     String   @default("")
+  cancelled       Boolean  @default(false)
+  shipped         Boolean  @default(false)
+  productId       String?
+  invoiceId       String?
+  isExample       Boolean  @default(false)
+
+  @@unique([amazonOrderId, orderItemId])
 }
 
 model ScheduleRelease {
