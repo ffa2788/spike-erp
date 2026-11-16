@@ -124,7 +124,7 @@ export async function buildPlan(asOf = toDateInput(new Date())) {
   for (const row of history) usage.set(row.itemId, (usage.get(row.itemId) ?? 0) + row.qty);
   const coverage = items.map((item) => {
     const weeks = plan.gross.get(item.id) ?? Array(12).fill(0);
-    const suggested = plan.planned.filter((row) => row.itemId === item.id).reduce((sum, row) => sum + row.qty, 0);
+    const suggested = Math.round(plan.planned.filter((row) => row.itemId === item.id).reduce((sum, row) => sum + row.qty, 0) * 10000) / 10000;
     const covered = coverItem({
       onHand: item.onHandReleased,
       reorderPoint: item.reorderPoint,

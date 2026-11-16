@@ -7,6 +7,11 @@ export type Coverage = {
   action: string;
 };
 
+function cleanQty(qty: number): string {
+  const rounded = Math.round(qty * 10000) / 10000;
+  return rounded.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
 function weeksCover(onHand: number, weekly: number[]): number | null {
   const total = weekly.reduce((sum, qty) => sum + qty, 0);
   if (!(total > 0)) return null;
@@ -46,11 +51,11 @@ export function coverItem(input: {
   else if (daysVsUsage != null && input.leadTimeDays > 0 && daysVsUsage < input.leadTimeDays) status = "LOW";
   let action = "No order needed.";
   if (input.suggestedQty > 0 && input.openPoQty > 0) {
-    action = `A purchase order is already open for ${input.openPoQty} ${input.unit}. The plan still wants ${input.suggestedQty} ${input.unit} more.`;
+    action = `A purchase order is already open for ${cleanQty(input.openPoQty)} ${input.unit}. The plan still wants ${cleanQty(input.suggestedQty)} ${input.unit} more.`;
   } else if (input.suggestedQty > 0) {
-    action = `Order ${input.suggestedQty} ${input.unit}. No purchase order is open.`;
+    action = `Order ${cleanQty(input.suggestedQty)} ${input.unit}. No purchase order is open.`;
   } else if (input.openPoQty > 0) {
-    action = `A purchase order is already open for ${input.openPoQty} ${input.unit}.`;
+    action = `A purchase order is already open for ${cleanQty(input.openPoQty)} ${input.unit}.`;
   }
   void horizons;
   return { daysVsUsage, weeksVsDemand, status, action };

@@ -105,6 +105,12 @@ describe("coverage and alerts", () => {
     });
     expect(ok.status).toBe("OK");
     expect(ok.weeksVsDemand[4]).toBeGreaterThan(4);
+    const noisy = coverItem({
+      onHand: 0, reorderPoint: 0, safetyQty: 0, leadTimeDays: 0, weeklyUsage: 1,
+      demandByWeek: [1], suggestedQty: 0.9996000000000002, openPoQty: 28.773600000000002, unit: "lb",
+    });
+    expect(noisy.action).toBe("A purchase order is already open for 28.7736 lb. The plan still wants 0.9996 lb more.");
+    expect(noisy.action).not.toMatch(/000000/);
   });
 
   it("sends one alert per status change and one digest per day", () => {

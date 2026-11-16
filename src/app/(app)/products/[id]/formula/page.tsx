@@ -28,17 +28,25 @@ export default async function FormulaBuilderPage({
     },
   });
   if (!product) notFound();
+  const asPackage = await prisma.packagedSku.findUnique({ where: { outputProductId: id } });
+  const recipe = asPackage && asPackage.productId !== id
+    ? await prisma.product.findUnique({
+        where: { id: asPackage.productId },
+        include: { formulas: { include: { lines: { include: { ingredient: true } } }, orderBy: { version: "desc" } } },
+      })
+    : product;
+  if (!recipe) notFound();
   const [products, formulas, packages] = await Promise.all([
     prisma.product.findMany({ orderBy: { name: "asc" } }),
     prisma.formula.findMany({ where: { isDefault: true }, include: { lines: true } }),
     prisma.packagedSku.findMany({
-      where: { productId: id },
+      where: { productId: recipe.id },
       include: { lines: { include: { material: true } }, outputProduct: true },
     }),
   ]);
-  const current = product.formulas.find((formula) => formula.isDefault) ?? product.formulas[0];
+  const current = recipe.formulas.find((formula) => formula.isDefault) ?? recipe.formulas[0];
   const rolled = rollUpCost(
-    product.id,
+    recipe.id,
     products.map((item) => ({ id: item.id, sku: item.sku, name: item.name, kind: item.kind, standardCost: Number(item.standardCost) })),
     formulas.map((formula) => ({
       productId: formula.productId,
@@ -48,8 +56,8 @@ export default async function FormulaBuilderPage({
   );
   const form = product.form === "POWDER" ? "POWDER" : "LIQUID";
   const presets = PACKAGE_PRESETS.filter((preset) => preset.form === form);
-  const selected = presets.find((preset) => preset.code === pack) ?? presets[3] ?? presets[0];
-  const gravity = current?.specificGravity != null ? Number(current.specificGravity) : product.specificGravity != null ? Number(product.specificGravity) : null;
+  const selected = presets.find((preset) => preset.code === pack) ?? presets.find((preset) => preset.code === asPackage?.packageCode) ?? presets[3] ?? presets[0];
+  const gravity = current?.specificGravity != null ? Number(current.specificGravity) : recipe.specificGravity != null ? Number(recipe.specificGravity) : null;
   const contentsLb = contentsWeightLb({ form, gallons: selected.gallons, netLb: selected.netLb, specificGravity: gravity });
   const scaled = current && contentsLb ? scaleToPounds(current.lines.map((line) => ({ key: line.ingredientId, percent: Number(line.percent) })), contentsLb) : [];
   const chosenPackage = packages.find((item) => item.packageCode === selected.code);
@@ -72,6 +80,7 @@ export default async function FormulaBuilderPage({
       <h1>Formula for {product.name}</h1>
       <p className="lede">Enter the batch in pounds. SPIKE turns that into a 100% formula, then scales it to the package you pick.</p>
       <Flash error={query.error} notice={query.notice} />
+      {recipe.id !== product.id && <p>This package is filled from {recipe.name}. The recipe and the cost below belong to that product.</p>}
       <div className={`banner ${rolled.status === "OK" ? "good" : "bad"}`}>
         {rolled.status === "OK" && rolled.costPerUnit != null
           ? `Recipe cost ${usdPrecise(rolled.costPerUnit)} per lb, including sub-recipes.`
@@ -124,14 +133,14 @@ export default async function FormulaBuilderPage({
       )}
       <h2>New version from pounds</h2>
       <form action={savePoundsFormula}>
-        <input type="hidden" name="productId" value={product.id} />
+        <input type="hidden" name="productId" value={recipe.id} />
         <label className="field">Specific gravity<input name="specificGravity" defaultValue={gravity ?? ""} /></label>
         {[0, 1, 2, 3, 4].map((row) => (
           <div className="grid-2" key={row}>
             <label className="field">Ingredient
               <select name="ingredientId" defaultValue={current?.lines[row]?.ingredientId ?? ""}>
                 <option value="">None</option>
-                {products.filter((item) => item.id !== product.id && item.kind !== "PACKAGING").map((item) => (
+                {products.filter((item) => item.id !== recipe.id && item.kind !== "PACKAGING").map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
@@ -144,7 +153,7 @@ export default async function FormulaBuilderPage({
       </form>
       <h2>Earlier versions</h2>
       <ul>
-        {product.formulas.map((formula) => (
+        {recipe.formulas.map((formula) => (
           <li key={formula.id}>Version {formula.version}{formula.isDefault ? " · current" : ""} · {Number(formula.batchQty)} lb · {formula.lines.length} ingredients</li>
         ))}
       </ul>

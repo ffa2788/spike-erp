@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Flash, readQuery } from "@/components/ui";
 import { amazonConnection } from "@/lib/amazon-sp";
+import { prisma } from "@/lib/db";
 import { buildSchedule } from "@/lib/services/schedule-run";
 import { formatQty } from "@/lib/format";
 import { releaseToTrevor, saveFbaStock } from "@/server/planning-actions";
@@ -16,8 +17,11 @@ export default async function SchedulePage({
 }) {
   const query = await readQuery(searchParams);
   const weeks = Math.min(52, Math.max(1, Number(query.q) || 8));
-  const schedule = await buildSchedule(undefined, weeks);
-  const amazon = amazonConnection();
+  const [schedule, amazon, fbaFile] = await Promise.all([
+    buildSchedule(undefined, weeks),
+    Promise.resolve(amazonConnection()),
+    prisma.fbaBalance.count({ where: { source: "AMAZON_FILE" } }),
+  ]);
   return (
     <>
       <h1>Suggested production schedule</h1>
@@ -30,6 +34,8 @@ export default async function SchedulePage({
       <Flash error={query.error} notice={query.notice} />
       {amazon.connected ? (
         <div className="banner good">Amazon is connected. Paste the latest FBA inventory report below, or type the quantities.</div>
+      ) : fbaFile > 0 ? (
+        <div className="banner good">Amazon's API is not connected. The FBA columns use the Seller Central inventory file you imported.</div>
       ) : (
         <div className="banner warn">Amazon is not connected. Enter FBA fulfillable and inbound quantities here, or paste a CSV. Nothing is invented.</div>
       )}
