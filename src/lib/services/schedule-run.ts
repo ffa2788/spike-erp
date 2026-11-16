@@ -7,7 +7,10 @@ import { toDateInput } from "../dates";
 import { prisma } from "../db";
 import { currentStock } from "../read-models";
 import { deliverEmail, emailSetup } from "../email";
-import { workListPdf, workListTable } from "../work-list-mail";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { htmlToPdf } from "../html-to-pdf";
+import { buildPlan, planDocumentHtml, planEmailHtml, planPlainText } from "../work-list-mail";
 import { nextNumber, run, type Actor } from "./shared";
 import { err, ok, type Result } from "../result";
 
@@ -159,7 +162,13 @@ export async function releaseSchedule(
             dueOn: new Date(`${(line.dueOn || input.asOf)}T12:00:00Z`),
             formulaVersion: line.formulaVersion,
             pullLot: line.pullLot,
-            materials: line.materials.map((material) => `${material.name}: ${material.qty} ${material.unit}${material.short > 0 ? ` (short ${material.short})` : ""}`).join("\n"),
+            materials: JSON.stringify(line.materials.map((material) => ({
+              name: material.name,
+              qty: material.qty,
+              unit: material.unit,
+              onHand: material.onHand,
+              short: material.short,
+            }))),
             daysCover: line.daysCover,
             shortage: line.shortage,
           })),
@@ -174,37 +183,30 @@ export async function emailSchedule(releaseId: string, emailTo: string) {
   const setup = emailSetup();
   const release = await prisma.scheduleRelease.findUnique({ where: { id: releaseId }, include: { lines: true } });
   if (!release || !emailTo) return;
-  const message = workListTable({
+  const plan = buildPlan({
     number: release.number,
     weekOf: toDateInput(release.weekOf),
+    releasedOn: toDateInput(release.createdAt),
+    releasedBy: "",
     lines: release.lines.map((line) => ({
       dueOn: toDateInput(line.dueOn),
       sku: line.sku,
       name: line.name,
       packageLabel: line.packageLabel,
-      qty: String(Number(line.qty)),
-      fbaQty: String(Number(line.fbaQty)),
+      qty: Number(line.qty),
+      fbaQty: Number(line.fbaQty),
       unit: line.unit,
-      materials: line.materials.replaceAll("\n", "; "),
+      formulaVersion: line.formulaVersion,
+      daysCover: line.daysCover == null ? null : Number(line.daysCover),
       shortage: line.shortage,
+      materials: line.materials,
     })),
   });
-  const pdf = workListPdf({
-    number: release.number,
-    weekOf: toDateInput(release.weekOf),
-    lines: release.lines.map((line) => ({
-      dueOn: toDateInput(line.dueOn),
-      sku: line.sku,
-      name: line.name,
-      packageLabel: line.packageLabel,
-      qty: String(Number(line.qty)),
-      fbaQty: String(Number(line.fbaQty)),
-      unit: line.unit,
-      materials: line.materials.replaceAll("\n", "; "),
-      shortage: line.shortage,
-    })),
-  });
-  const text = message.text;
+  const text = planPlainText(plan);
+  const html = planEmailHtml(plan);
+  const logo = pathToFileURL(join(process.cwd(), "public/brand/logo.png")).href;
+  const pdf = await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{size:letter landscape;margin:0.25in} body{margin:0}</style></head><body>${planDocumentHtml(plan, logo)}</body></html>`);
+  const message = { subject: `Work list ${release.number} for Trevor`, text, html };
   if (!setup.configured) {
     await prisma.emailLog.create({
       data: { toAddress: emailTo, subject: message.subject, body: text, status: "SKIPPED", detail: `Email is not configured. PDF ${release.number}.pdf was prepared and not sent.` },
@@ -217,6 +219,7 @@ export async function emailSchedule(releaseId: string, emailTo: string) {
     to: [emailTo],
     subject: message.subject,
     text,
+    html: message.html,
     attachments: [{ filename: `${release.number}.pdf`, contentType: "application/pdf", bytes: pdf }],
   });
   await prisma.emailLog.create({

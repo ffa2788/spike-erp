@@ -125,5 +125,5 @@ export async function releaseToTrevor(formData: FormData) {
   if (!released.ok) fail("/planning/schedule", released.error);
   if (!emailTo) fail(`/planning/schedule/${released.value.id}`, "The work list is saved. Add Trevor's email in Settings before it can be sent.");
   await emailSchedule(released.value.id, emailTo);
-  succeed(`/planning/schedule/${released.value.id}`, `Released to Trevor. The email preview is below, addressed to ${emailTo}.`);
+  succeed(`/planning/schedule/${released.value.id}/email`, `Released to Trevor. This is the email, with ${released.value.number}.pdf attached.`);
 }

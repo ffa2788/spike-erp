@@ -4,7 +4,7 @@ import { calculatePay, postingBlock, payrollJournal, quarterlyPayroll, type Payr
 import { pathShowsFormula, pathSteps } from "@/lib/product-path";
 import { DEMO_USERS } from "@/lib/demo-auth";
 import { SHARED_NAV } from "@/lib/roles";
-import { workListPdf, workListTable } from "@/lib/work-list-mail";
+import { buildPlan, parsePulls, planEmailHtml, planPlainText, wholeUnits } from "@/lib/work-list-mail";
 import { channelPrefix } from "@/lib/commercial";
 
 const table: PayrollTable = {
@@ -27,19 +27,31 @@ describe("roles, product paths, export, and payroll", () => {
     expect(DEMO_USERS.map((user) => user.name)).toEqual(["FFA", "Chris"]);
   });
 
-  it("builds Trevor's email as a table plus a PDF", () => {
-    const message = workListTable({
+  it("builds a production plan with separate material rows and a whole-unit packaging list", () => {
+    const pulls = parsePulls("Example 1 gal jug: 0.2 each (short 0.2)\nPhosphoric acid 75%: 0.4 lb");
+    expect(pulls.map((item) => item.name)).toEqual(["1 gal jug", "Phosphoric acid 75%"]);
+    expect(wholeUnits(0.0278)).toBe(1);
+    const plan = buildPlan({
       number: "WK-1001",
       weekOf: "2026-11-16",
-      lines: [{ dueOn: "2026-11-16", sku: "RUST-1G", name: "Rust Preventer", packageLabel: "1 gal", qty: "4", fbaQty: "0", unit: "each", materials: "jug 4", shortage: false }],
+      releasedOn: "2026-11-16",
+      releasedBy: "FFA",
+      lines: [
+        { dueOn: "2026-11-17", sku: "RUST-1G", name: "SPER Rust Preventer", packageLabel: "1 gal", qty: 4, fbaQty: 0, unit: "each", formulaVersion: 1, daysCover: 0, shortage: true, materials: JSON.stringify(pulls) },
+        { dueOn: "2026-11-18", sku: "POLY-BEAD", name: "SPER PolyPhos beads", packageLabel: "Bulk", qty: 0, fbaQty: 0, unit: "lb", formulaVersion: 1, daysCover: 20, shortage: false, materials: "" },
+      ],
     });
-    expect(message.subject).toBe("Work list WK-1001 for Trevor");
-    expect(message.text).toContain("RUST-1G");
-    expect(message.text).toContain("Ship to FBA");
-    const pdf = Buffer.from(workListPdf({ number: "WK-1001", weekOf: "2026-11-16", lines: [{ dueOn: "2026-11-16", sku: "RUST-1G", name: "Rust Preventer", packageLabel: "1 gal", qty: "4", fbaQty: "0", unit: "each", materials: "jug", shortage: false }] }));
-    expect(pdf.subarray(0, 8).toString()).toBe("%PDF-1.4");
-    expect(pdf.toString()).toContain("Helvetica");
-    expect(pdf.toString()).toContain("RUST-1G");
+    expect(plan.jobs).toHaveLength(1);
+    expect(plan.skipped).toHaveLength(1);
+    expect(plan.makeLabel).toBe("4 gal");
+    expect(plan.packagingPicks[0].qty).toBe(1);
+    const text = planPlainText(plan);
+    expect(text).toContain("Material  Phosphoric acid 75%");
+    expect(text).not.toContain("jug: 0.2");
+    const html = planEmailHtml(plan);
+    expect(html).toContain("Production Plan, Week of");
+    expect(html).toContain("Material short");
+    expect(html).not.toContain("<pre>");
   });
 
   it("uses the product path to decide whether a formula is required", () => {

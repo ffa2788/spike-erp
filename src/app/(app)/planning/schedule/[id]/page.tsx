@@ -1,59 +1,48 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { PrintButton } from "@/components/print-button";
 import { prisma } from "@/lib/db";
-import { formatDate, formatQty } from "@/lib/format";
 import { toDateInput } from "@/lib/dates";
-import { workListTable } from "@/lib/work-list-mail";
+import { buildPlan, planDocumentHtml } from "@/lib/work-list-mail";
 
 export const dynamic = "force-dynamic";
-
-const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default async function ReleasedSchedulePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const release = await prisma.scheduleRelease.findUnique({ where: { id }, include: { lines: { orderBy: { dueOn: "asc" } } } });
   if (!release) notFound();
-  const company = await prisma.companyProfile.findUnique({ where: { id: "company" } });
-  const preview = workListTable({
+  const plan = buildPlan({
     number: release.number,
     weekOf: toDateInput(release.weekOf),
+    releasedOn: toDateInput(release.createdAt),
+    releasedBy: "",
     lines: release.lines.map((line) => ({
       dueOn: toDateInput(line.dueOn),
       sku: line.sku,
       name: line.name,
       packageLabel: line.packageLabel,
-      qty: formatQty(Number(line.qty)),
-      fbaQty: formatQty(Number(line.fbaQty)),
+      qty: Number(line.qty),
+      fbaQty: Number(line.fbaQty),
       unit: line.unit,
-      materials: line.materials.replaceAll("\n", "; "),
+      formulaVersion: line.formulaVersion,
+      daysCover: line.daysCover == null ? null : Number(line.daysCover),
       shortage: line.shortage,
+      materials: line.materials,
     })),
   });
+  const html = planDocumentHtml(plan, "/brand/logo.png");
   return (
-    <article className="paper">
-      <p className="no-print"><PrintButton label="Print or save as PDF" /></p>
-      <h1>Work list {release.number}</h1>
-      <p>For Trevor. Week of {formatDate(release.weekOf)}. History window {release.windowWeeks} weeks.</p>
-      <h2>Email to Trevor</h2>
-      <p>To: {release.emailedTo || company?.trevorEmail || "Add Trevor's email in Settings."}</p>
-      <p>Subject: {preview.subject}</p>
-      <p>Attached: {release.number}.pdf</p>
-      <pre>{preview.text}</pre>
-      {release.lines.map((line) => {
-        const due = line.dueOn.toISOString().slice(0, 10);
-        return (
-          <section key={line.id}>
-            <h2>{dayName[new Date(`${due}T00:00:00Z`).getUTCDay()]} {formatDate(line.dueOn)}</h2>
-            <p><strong>{line.sku}</strong> {line.name} · {line.packageLabel}</p>
-            <p>Make {formatQty(Number(line.qty), line.unit)}. Ship to FBA {formatQty(Number(line.fbaQty), line.unit)}.</p>
-            <p>Formula version {line.formulaVersion ?? "none"}. Pull lot {line.pullLot || "assign when the batch starts"}.</p>
-            <p>Days of cover {line.daysCover == null ? "not calculated" : Number(line.daysCover)}.</p>
-            <p>Materials to pull:</p>
-            <p>{line.materials || "None listed."}</p>
-            {line.shortage && <p>A material is short. Do not start until it is in the supermarket.</p>}
-          </section>
-        );
-      })}
-    </article>
+    <>
+      <p className="no-print"><PrintButton label="Print or save as PDF" /> <Link href={`/planning/schedule/${release.id}/email`}>Email preview</Link></p>
+      <style>{`
+        .plan-sheet { max-width: none; background: white; padding: 0; }
+        .plan-sheet .plan { font-size: 13px; }
+        @media print {
+          @page { size: letter landscape; margin: 0.25in; }
+          .plan-sheet { font-size: 11px; }
+        }
+      `}</style>
+      <article className="plan-sheet" dangerouslySetInnerHTML={{ __html: html }} />
+    </>
   );
 }

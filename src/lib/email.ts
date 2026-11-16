@@ -2,7 +2,7 @@ export type EmailEnv = NodeJS.ProcessEnv;
 
 export type EmailAttachment = { filename: string; contentType: string; bytes: Uint8Array };
 
-export type EmailMessage = { from: string; to: string[]; subject: string; text: string; attachments?: EmailAttachment[] };
+export type EmailMessage = { from: string; to: string[]; subject: string; text: string; html?: string; attachments?: EmailAttachment[] };
 
 function attachmentBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -38,6 +38,7 @@ export async function deliverEmail(message: EmailMessage, env: EmailEnv = proces
         to: message.to,
         subject: message.subject,
         text: message.text,
+        html: message.html,
         attachments: (message.attachments ?? []).map((file) => ({
           filename: file.filename,
           content: attachmentBase64(file.bytes),
@@ -56,6 +57,7 @@ export async function deliverEmail(message: EmailMessage, env: EmailEnv = proces
         To: message.to.join(","),
         Subject: message.subject,
         TextBody: message.text,
+        HtmlBody: message.html,
         Attachments: (message.attachments ?? []).map((file) => ({
           Name: file.filename,
           Content: attachmentBase64(file.bytes),
