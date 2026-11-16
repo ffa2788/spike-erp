@@ -80,6 +80,7 @@ export async function seedDemo() {
       phone: "(727) 555-0198",
       nsfNote: "Example NSF/ANSI 60 drinking-water treatment listing. Not a real certificate.",
       showExampleBanner: true,
+      trevorEmail: "trevor@sper.example",
     },
   });
   await prisma.taxRate.createMany({
@@ -659,8 +660,8 @@ export async function seedDemo() {
   await prisma.product.updateMany({ where: { sku: { in: ["RUST-PREV", "POLY-LIQ", "POLY-BEAD", "RUST-REM", "LAWN", "RUST-1G", "POLY-LIQ-1G", "POLY-BEAD-50"] } }, data: { path: "MANUFACTURED" } });
   await prisma.employee.createMany({
     data: [
-      { name: "Frank Abbott", payType: "SALARY", rateCents: 400000, federalWithholdingBps: 1000, isExample: true },
-      { name: "Office partner", payType: "SALARY", rateCents: 300000, federalWithholdingBps: 1000, isExample: true },
+      { name: "FFA", payType: "SALARY", rateCents: 400000, federalWithholdingBps: 1000, isExample: true },
+      { name: "Chris", payType: "SALARY", rateCents: 300000, federalWithholdingBps: 1000, isExample: true },
       { name: "Trevor", payType: "HOURLY", rateCents: 2500, federalWithholdingBps: 800, isExample: true },
     ],
   });

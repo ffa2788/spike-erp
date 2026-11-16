@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { journalProblem } from "@/lib/journals";
 import { calculatePay, postingBlock, payrollJournal, quarterlyPayroll, type PayrollTable } from "@/lib/payroll";
 import { pathShowsFormula, pathSteps } from "@/lib/product-path";
-import { navForRole } from "@/lib/roles";
+import { DEMO_USERS } from "@/lib/demo-auth";
+import { SHARED_NAV } from "@/lib/roles";
+import { workListPdf, workListTable } from "@/lib/work-list-mail";
 import { channelPrefix } from "@/lib/commercial";
 
 const table: PayrollTable = {
@@ -17,17 +19,27 @@ const table: PayrollTable = {
 };
 
 describe("roles, product paths, export, and payroll", () => {
-  it("shows each person only their own work", () => {
-    const office = navForRole("PARTNER").flatMap((group) => group.links.map((link) => link.href));
-    const trevor = navForRole("WAREHOUSE").flatMap((group) => group.links.map((link) => link.href));
-    const owner = navForRole("OWNER").flatMap((group) => group.links.map((link) => link.href));
-    expect(office).toContain("/payroll");
-    expect(office).not.toContain("/production");
-    expect(trevor).toContain("/production");
-    expect(trevor).not.toContain("/payroll");
-    expect(trevor).not.toContain("/tax");
-    expect(owner).toContain("/products");
-    expect(owner).not.toContain("/payroll");
+  it("gives FFA and Chris one menu, and Trevor no login", () => {
+    const hrefs = SHARED_NAV.flatMap((group) => group.links.map((link) => link.href));
+    expect(hrefs).toContain("/payroll");
+    expect(hrefs).toContain("/production");
+    expect(hrefs).toContain("/tax");
+    expect(DEMO_USERS.map((user) => user.name)).toEqual(["FFA", "Chris"]);
+  });
+
+  it("builds Trevor's email as a table plus a PDF", () => {
+    const message = workListTable({
+      number: "WK-1001",
+      weekOf: "2026-11-16",
+      lines: [{ dueOn: "2026-11-16", sku: "RUST-1G", name: "Rust Preventer", packageLabel: "1 gal", qty: "4", fbaQty: "0", unit: "each", materials: "jug 4", shortage: false }],
+    });
+    expect(message.subject).toBe("Work list WK-1001 for Trevor");
+    expect(message.text).toContain("RUST-1G");
+    expect(message.text).toContain("Ship to FBA");
+    const pdf = Buffer.from(workListPdf({ number: "WK-1001", weekOf: "2026-11-16", lines: [{ dueOn: "2026-11-16", sku: "RUST-1G", name: "Rust Preventer", packageLabel: "1 gal", qty: "4", fbaQty: "0", unit: "each", materials: "jug", shortage: false }] }));
+    expect(pdf.subarray(0, 8).toString()).toBe("%PDF-1.4");
+    expect(pdf.toString()).toContain("Helvetica");
+    expect(pdf.toString()).toContain("RUST-1G");
   });
 
   it("uses the product path to decide whether a formula is required", () => {

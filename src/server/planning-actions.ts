@@ -12,6 +12,14 @@ function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+export async function saveTrevorEmail(formData: FormData) {
+  await requireCan("editMasters");
+  const email = text(formData, "trevorEmail");
+  if (email && !email.includes("@")) fail("/settings", "Enter Trevor's email address.");
+  await prisma.companyProfile.update({ where: { id: "company" }, data: { trevorEmail: email } });
+  succeed("/settings", email ? `Trevor's email is ${email}. Release to Trevor will send the work list there.` : "Trevor's email was cleared.");
+}
+
 export async function convertPlanAction() {
   const actor = await requireCan("editMasters");
   const today = new Date().toISOString().slice(0, 10);
@@ -111,9 +119,11 @@ export async function releaseToTrevor(formData: FormData) {
       shortage: materials.some((material) => material.short > 0),
     };
   });
-  const released = await releaseSchedule(actor, { asOf: built.asOf, windowWeeks: built.weeks, emailTo: text(formData, "emailTo"), lines });
+  const company = await prisma.companyProfile.findUnique({ where: { id: "company" } });
+  const emailTo = company?.trevorEmail.trim() ?? "";
+  const released = await releaseSchedule(actor, { asOf: built.asOf, windowWeeks: built.weeks, emailTo, lines });
   if (!released.ok) fail("/planning/schedule", released.error);
-  const emailTo = text(formData, "emailTo");
-  if (emailTo) await emailSchedule(released.value.id, emailTo);
-  succeed(`/planning/schedule/${released.value.id}`, emailTo ? "Released to Trevor. The work list is ready to print." : "Released to Trevor.");
+  if (!emailTo) fail(`/planning/schedule/${released.value.id}`, "The work list is saved. Add Trevor's email in Settings before it can be sent.");
+  await emailSchedule(released.value.id, emailTo);
+  succeed(`/planning/schedule/${released.value.id}`, `Released to Trevor. The email preview is below, addressed to ${emailTo}.`);
 }

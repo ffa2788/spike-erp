@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navForRole } from "@/lib/roles";
-import type { RoleName } from "@/lib/permissions";
+import { SHARED_NAV } from "@/lib/roles";
 
-export function SideNav({ role }: { role: RoleName }) {
+export function SideNav() {
   const path = usePathname();
-  const visible = navForRole(role);
   return (
     <nav>
-      {visible.map((group) => (
+      {SHARED_NAV.map((group) => (
         <div key={group.label}>
           <div className="nav-group">{group.label}</div>
           {group.links.map((link) => {

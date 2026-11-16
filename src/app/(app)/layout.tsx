@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span>Sales, planning, inventory</span>
           </div>
         </div>
-        <SideNav role={user.role} />
+        <SideNav />
         <div className="who">
           <strong>{user.name}</strong>
           <span>{ROLE_LABEL[user.role]}</span>

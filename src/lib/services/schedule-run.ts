@@ -7,6 +7,7 @@ import { toDateInput } from "../dates";
 import { prisma } from "../db";
 import { currentStock } from "../read-models";
 import { deliverEmail, emailSetup } from "../email";
+import { workListPdf, workListTable } from "../work-list-mail";
 import { nextNumber, run, type Actor } from "./shared";
 import { err, ok, type Result } from "../result";
 
@@ -173,15 +174,51 @@ export async function emailSchedule(releaseId: string, emailTo: string) {
   const setup = emailSetup();
   const release = await prisma.scheduleRelease.findUnique({ where: { id: releaseId }, include: { lines: true } });
   if (!release || !emailTo) return;
-  const text = release.lines.map((line) => `${toDateInput(line.dueOn)} ${line.sku} ${line.packageLabel}: make ${line.qty} ${line.unit}. FBA ship ${line.fbaQty}. ${line.materials}`).join("\n");
+  const message = workListTable({
+    number: release.number,
+    weekOf: toDateInput(release.weekOf),
+    lines: release.lines.map((line) => ({
+      dueOn: toDateInput(line.dueOn),
+      sku: line.sku,
+      name: line.name,
+      packageLabel: line.packageLabel,
+      qty: String(Number(line.qty)),
+      fbaQty: String(Number(line.fbaQty)),
+      unit: line.unit,
+      materials: line.materials.replaceAll("\n", "; "),
+      shortage: line.shortage,
+    })),
+  });
+  const pdf = workListPdf({
+    number: release.number,
+    weekOf: toDateInput(release.weekOf),
+    lines: release.lines.map((line) => ({
+      dueOn: toDateInput(line.dueOn),
+      sku: line.sku,
+      name: line.name,
+      packageLabel: line.packageLabel,
+      qty: String(Number(line.qty)),
+      fbaQty: String(Number(line.fbaQty)),
+      unit: line.unit,
+      materials: line.materials.replaceAll("\n", "; "),
+      shortage: line.shortage,
+    })),
+  });
+  const text = message.text;
   if (!setup.configured) {
     await prisma.emailLog.create({
-      data: { toAddress: emailTo, subject: `Schedule ${release.number}`, body: text, status: "SKIPPED", detail: "Email is not configured." },
+      data: { toAddress: emailTo, subject: message.subject, body: text, status: "SKIPPED", detail: `Email is not configured. PDF ${release.number}.pdf was prepared and not sent.` },
     });
     await prisma.scheduleRelease.update({ where: { id: releaseId }, data: { emailedTo: emailTo } });
     return;
   }
-  const sent = await deliverEmail({ from: setup.from, to: [emailTo], subject: `Production schedule ${release.number} for Trevor`, text });
+  const sent = await deliverEmail({
+    from: setup.from,
+    to: [emailTo],
+    subject: message.subject,
+    text,
+    attachments: [{ filename: `${release.number}.pdf`, contentType: "application/pdf", bytes: pdf }],
+  });
   await prisma.emailLog.create({
     data: { toAddress: emailTo, subject: `Production schedule ${release.number}`, body: text, status: sent.ok ? "SENT" : "FAILED", detail: sent.detail },
   });

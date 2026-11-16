@@ -227,6 +227,7 @@ model CompanyProfile {
   entityType        EntityType @default(S_CORP)
   emailDigest       Boolean    @default(false)
   lastDigestOn      DateTime?
+  trevorEmail       String     @default("")
 }
 
 model Party {

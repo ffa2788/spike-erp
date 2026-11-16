@@ -75,9 +75,7 @@ export default async function SchedulePage({
             ))}
           </tbody>
         </table></div>
-        <label className="field">Email the work list <span>Leave blank to print only. Trevor's address, if you want it sent.</span>
-          <input name="emailTo" type="email" />
-        </label>
+        <p>Release emails Trevor the printable PDF and a short table. His address is stored in Settings.</p>
         <button className="btn" type="submit">Release to Trevor</button>
       </form>
       <h2>FBA quantities</h2>

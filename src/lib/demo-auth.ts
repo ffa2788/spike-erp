@@ -4,20 +4,14 @@ export const DEMO_PASSWORD = "example-only-change-me";
 export const DEMO_USERS = [
   {
     email: "frank@sper.example",
-    name: "Frank Abbott",
+    name: "FFA",
     role: "OWNER" as const,
     totpSecret: "KWF3ZPUGGKC66FWSLJRYUW4HCPEZZJBC",
   },
   {
-    email: "partner@sper.example",
-    name: "Business Partner",
+    email: "chris@sper.example",
+    name: "Chris",
     role: "PARTNER" as const,
     totpSecret: "LF2XI7OMRHPZRQPRLIJDFC3PBKWIPM7O",
-  },
-  {
-    email: "trevor@sper.example",
-    name: "Trevor",
-    role: "WAREHOUSE" as const,
-    totpSecret: "35HHBJMQDFOXMDSFGM5NNM7Y5EGAJUH5",
   },
 ];

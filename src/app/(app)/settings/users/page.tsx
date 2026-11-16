@@ -13,11 +13,11 @@ export default async function UsersPage({
 }) {
   await requireCan("manageUsers");
   const query = await readQuery(searchParams);
-  const users = await prisma.user.findMany({ orderBy: { name: "asc" } });
+  const users = await prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   return (
     <>
       <h1>People and roles</h1>
-      <p className="lede">The owner manages people. A partner can run the books. Warehouse can ship, receive, and make batches. Read only can look.</p>
+      <p className="lede">Only FFA and Chris sign in. Both see the whole operation. Trevor does not have a login. He receives the weekly work list by email.</p>
       <Flash error={query.error} notice={query.notice} />
       <div className="wrap"><table>
         <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Sign-in code</th></tr></thead>
@@ -34,9 +34,7 @@ export default async function UsersPage({
         <label className="field">Role
           <select name="role" defaultValue="PARTNER">
             <option value="OWNER">Owner</option>
-            <option value="PARTNER">Partner / accounting</option>
-            <option value="WAREHOUSE">Warehouse</option>
-            <option value="READONLY">Read only</option>
+            <option value="PARTNER">Office</option>
           </select>
         </label>
         <label className="field">Temporary password<input name="password" type="password" required /></label>
