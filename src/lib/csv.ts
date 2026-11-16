@@ -1,6 +1,10 @@
-export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+export function csvTable(text: string): string[][] {
   const clean = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const table = parseRows(clean).filter((row) => row.some((cell) => cell.trim() !== ""));
+  return parseRows(clean);
+}
+
+export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
+  const table = csvTable(text).filter((row) => row.some((cell) => cell.trim() !== ""));
   if (table.length === 0) return { headers: [], rows: [] };
   const headers = table[0].map((cell) => cell.trim());
   const rows = table.slice(1).map((cols) => {

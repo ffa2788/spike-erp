@@ -958,6 +958,29 @@ model AmazonOrderItem {
   @@unique([amazonOrderId, orderItemId])
 }
 
+model AmazonSettlementLine {
+  id                       String  @id @default(cuid())
+  fingerprint              String  @unique
+  postedAt                 String
+  settlementId             String  @default("")
+  type                     String
+  orderId                  String  @default("")
+  sku                      String  @default("")
+  description              String  @default("")
+  qty                      Decimal @default(0) @db.Decimal(18, 4)
+  fulfillment              String  @default("")
+  productSalesCents        Int     @default(0)
+  sellingFeeCents          Int     @default(0)
+  fbaFeeCents              Int     @default(0)
+  otherTransactionFeeCents Int     @default(0)
+  otherCents               Int     @default(0)
+  promotionalRebatesCents  Int     @default(0)
+  totalCents               Int     @default(0)
+  productId                String?
+  journalId                String?
+  isExample                Boolean @default(false)
+}
+
 model ScheduleRelease {
   id         String   @id @default(cuid())
   number     String   @unique

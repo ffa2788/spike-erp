@@ -1,6 +1,7 @@
 export const CODES = {
   cash: "1000",
   ar: "1100",
+  amazonClearing: "1150",
   invRaw: "1200",
   invFg: "1210",
   wip: "1220",
@@ -29,6 +30,7 @@ export type AccountTypeName = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "COG
 export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.cash, name: "Cash in the bank", type: "ASSET" },
   { code: CODES.ar, name: "Money customers owe us", type: "ASSET" },
+  { code: CODES.amazonClearing, name: "Amazon holds for payout", type: "ASSET" },
   { code: CODES.invRaw, name: "Raw material on hand", type: "ASSET" },
   { code: CODES.invFg, name: "Finished goods on hand", type: "ASSET" },
   { code: CODES.wip, name: "Batches in progress", type: "ASSET" },

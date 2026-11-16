@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Flash, readQuery } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { suggestAmazonSku } from "@/lib/amazon-reports";
-import { importFbaAction, importOrdersAction, mapAmazonSkuAction } from "@/server/amazon-file-actions";
+import { usd } from "@/lib/format";
+import { amazonMarginView } from "@/lib/services/amazon-payments-import";
+import { importFbaAction, importOrdersAction, importPaymentsAction, mapAmazonSkuAction } from "@/server/amazon-file-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +14,11 @@ export default async function AmazonImportPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await readQuery(searchParams);
-  const [products, maps, unmappedItems] = await Promise.all([
+  const [products, maps, unmappedItems, margin] = await Promise.all([
     prisma.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.amazonSkuMap.findMany({ include: { product: true }, orderBy: { amazonSku: "asc" } }),
     prisma.amazonOrderItem.findMany({ where: { productId: null, cancelled: false }, orderBy: { sku: "asc" } }),
+    amazonMarginView(),
   ]);
   const unmapped = new Map<string, { sku: string; asin: string }>();
   for (const row of unmappedItems) unmapped.set(row.sku, { sku: row.sku, asin: row.asin });
@@ -43,6 +46,61 @@ export default async function AmazonImportPage({
         <label className="field">Or paste<textarea name="csv" /></label>
         <button className="btn" type="submit">Import FBA inventory</button>
       </form>
+      <h2>Payments date range</h2>
+      <p>This is Amazon's transaction CSV. The first lines are a preamble. SPIKE starts at the row that begins with date/time. Upload overlapping files and the same transaction is kept once. Fees in the file are negative.</p>
+      <form action={importPaymentsAction}>
+        <label className="field">Report file<input type="file" name="file" accept=".txt,.tsv,.csv" /></label>
+        <label className="field">Or paste<textarea name="csv" /></label>
+        <button className="btn" type="submit">Import payments</button>
+      </form>
+      <div id="amazon-margin">
+      <h2>Amazon margin by SKU</h2>
+      <p>
+        Net margin is product sales, minus Amazon fees, minus the formula and packaging cost.
+        The referral fee and the FBA fee are the average per unit on Order rows.
+        FBM label costs follow the order. The subscription, ads, and storage are spread by product sales. Refunds stay on their SKU.
+        {margin.lineCount > 0 ? ` ${margin.lineCount} payment rows are on file. Payouts to the bank total ${usd(margin.payoutCents)}. Match those deposits on Check the bank.` : ""}
+      </p>
+        <div className="wrap"><table>
+          <thead>
+            <tr><th>Amazon SKU</th><th>SPIKE product</th><th>Units</th><th>Product sales</th><th>Amazon fees</th><th>Formula + packaging</th><th>Net margin</th></tr>
+          </thead>
+          <tbody>
+            {margin.margins.map((row) => (
+              <tr key={row.sku}>
+                <td>{row.sku}</td>
+                <td>{row.productSku ? `${row.productSku} ${row.productName}` : row.productName || "Unmapped"}</td>
+                <td>{row.netUnits}</td>
+                <td>{usd(row.productSalesCents)}</td>
+                <td>{usd(row.feeExpenseCents)}</td>
+                <td>{row.costCents == null ? "Not costed" : usd(row.costCents)}</td>
+                <td>{row.marginCents == null ? "Not costed" : usd(row.marginCents)}</td>
+              </tr>
+            ))}
+            {margin.margins.length === 0 && <tr><td colSpan={7}>No payments report imported yet.</td></tr>}
+          </tbody>
+        </table></div>
+        <h2>Fee detail</h2>
+        <p>Referral and FBA fees are the average per unit sold on Order rows. Shipping labels follow the order. Subscription, ads, and storage are spread by product sales.</p>
+        <div className="wrap"><table>
+          <thead>
+            <tr><th>Amazon SKU</th><th>Referral / unit</th><th>FBA fee / unit</th><th>Shipping</th><th>Subscription and ads</th><th>Storage</th><th>Refunds</th></tr>
+          </thead>
+          <tbody>
+            {margin.margins.map((row) => (
+              <tr key={row.sku}>
+                <td>{row.sku}</td>
+                <td>{row.avgSellingFeePerUnitCents == null ? "—" : usd(row.avgSellingFeePerUnitCents)}</td>
+                <td>{row.avgFbaFeePerUnitCents == null ? "—" : usd(row.avgFbaFeePerUnitCents)}</td>
+                <td>{usd(row.shippingCents)}</td>
+                <td>{usd(row.serviceCents)}</td>
+                <td>{usd(row.storageCents)}</td>
+                <td>{usd(-row.refundSalesCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      </div>
       <h2>Import summary</h2>
       {query.notice ? <p>{query.notice}</p> : <p>No file imported in this visit yet.</p>}
       <h2>SKU mapping</h2>

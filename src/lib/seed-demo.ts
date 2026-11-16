@@ -47,7 +47,7 @@ export async function wipeDatabase() {
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
       "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast",
-      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonOrderItem", "AmazonSkuMap", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
       "AuditLog", "LoginAttempt", "CompanyProfile", "User"
     RESTART IDENTITY CASCADE
   `);

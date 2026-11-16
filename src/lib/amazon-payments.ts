@@ -1,0 +1,413 @@
+import { csvTable } from "./csv";
+import { parseDateInput, parseLooseDate } from "./dates";
+import { CODES } from "./chart";
+import type { DraftLine } from "./journals";
+
+export const PAYMENT_HEADERS = [
+  "date/time",
+  "settlement id",
+  "type",
+  "order id",
+  "sku",
+  "description",
+  "quantity",
+  "marketplace",
+  "account type",
+  "fulfillment",
+  "order city",
+  "order state",
+  "order postal",
+  "tax collection model",
+  "product sales",
+  "product sales tax",
+  "shipping credits",
+  "shipping credits tax",
+  "gift wrap credits",
+  "giftwrap credits tax",
+  "Regulatory Fee",
+  "Tax On Regulatory Fee",
+  "promotional rebates",
+  "promotional rebates tax",
+  "marketplace withheld tax",
+  "selling fees",
+  "fba fees",
+  "other transaction fees",
+  "other",
+  "total",
+  "Transaction Status",
+  "Transaction Release Date",
+] as const;
+
+const MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+export type PaymentRow = {
+  dateTime: string;
+  day: string;
+  settlementId: string;
+  type: string;
+  orderId: string;
+  sku: string;
+  description: string;
+  qty: number;
+  fulfillment: string;
+  channel: "FBA" | "FBM" | "";
+  productSalesCents: number;
+  sellingFeeCents: number;
+  fbaFeeCents: number;
+  otherTransactionFeeCents: number;
+  otherCents: number;
+  promotionalRebatesCents: number;
+  totalCents: number;
+};
+
+export type StoredPayment = Omit<PaymentRow, "channel">;
+
+export type SkuFeeRollup = {
+  sku: string;
+  orderUnits: number;
+  refundUnits: number;
+  netUnits: number;
+  orderSalesCents: number;
+  refundSalesCents: number;
+  productSalesCents: number;
+  avgSellingFeePerUnitCents: number | null;
+  avgFbaFeePerUnitCents: number | null;
+  shippingCents: number;
+  serviceCents: number;
+  storageCents: number;
+  otherAllocatedCents: number;
+  feeExpenseCents: number;
+};
+
+export function parseAmazonMoney(value: string): number {
+  const raw = value.trim();
+  if (!raw || raw === "--") return 0;
+  const negative = raw.includes("-") || /^\(.*\)$/.test(raw);
+  const digits = raw.replace(/[()$,\s]/g, "").replace(/^-/, "").replace(/-$/, "");
+  const amount = Number(digits);
+  if (!Number.isFinite(amount)) return 0;
+  const cents = Math.round(amount * 100);
+  return negative ? -cents : cents;
+}
+
+export function paymentDay(value: string): string {
+  const trimmed = value.trim();
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(trimmed);
+  if (iso && parseDateInput(iso[1])) return iso[1];
+  const named = /^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})/.exec(trimmed);
+  if (named) {
+    const month = MONTHS[named[1].slice(0, 3).toLowerCase()];
+    if (month) {
+      const candidate = `${named[3]}-${String(month).padStart(2, "0")}-${String(named[2]).padStart(2, "0")}`;
+      if (parseDateInput(candidate)) return candidate;
+    }
+  }
+  return parseLooseDate(trimmed) ?? "";
+}
+
+export function parsePaymentsReport(text: string): { rows: PaymentRow[]; error: string | null } {
+  const table = csvTable(text);
+  const headerIndex = table.findIndex((row) => (row[0] ?? "").trim().toLowerCase().startsWith("date/time"));
+  if (headerIndex < 0) return { rows: [], error: "The payments report needs a header row that starts with date/time." };
+  const headers = table[headerIndex].map((cell) => cell.trim().toLowerCase());
+  const at = (row: string[], name: string) => {
+    const index = headers.indexOf(name.toLowerCase());
+    return index >= 0 ? (row[index] ?? "").trim() : "";
+  };
+  const rows = table.slice(headerIndex + 1).flatMap((row) => {
+    if (row.every((cell) => cell.trim() === "")) return [];
+    const type = at(row, "type");
+    const dateTime = at(row, "date/time");
+    if (!type && !dateTime) return [];
+    const fulfillment = at(row, "fulfillment");
+    const kept: PaymentRow = {
+      dateTime,
+      day: paymentDay(dateTime),
+      settlementId: at(row, "settlement id"),
+      type,
+      orderId: at(row, "order id"),
+      sku: at(row, "sku").trim(),
+      description: at(row, "description"),
+      qty: Number(at(row, "quantity").replace(/,/g, "")) || 0,
+      fulfillment,
+      channel: channelOf(fulfillment),
+      productSalesCents: parseAmazonMoney(at(row, "product sales")),
+      sellingFeeCents: parseAmazonMoney(at(row, "selling fees")),
+      fbaFeeCents: parseAmazonMoney(at(row, "fba fees")),
+      otherTransactionFeeCents: parseAmazonMoney(at(row, "other transaction fees")),
+      otherCents: parseAmazonMoney(at(row, "other")),
+      promotionalRebatesCents: parseAmazonMoney(at(row, "promotional rebates")),
+      totalCents: parseAmazonMoney(at(row, "total")),
+    };
+    return [kept];
+  });
+  return { rows, error: null };
+}
+
+function channelOf(value: string): "FBA" | "FBM" | "" {
+  const text = value.trim().toLowerCase();
+  if (text === "amazon" || text === "afn") return "FBA";
+  if (text === "merchant" || text === "mfn") return "FBM";
+  return "";
+}
+
+export function paymentFingerprint(row: PaymentRow): string {
+  return [row.dateTime, row.settlementId, row.type, row.orderId, row.sku, row.description, row.qty, row.totalCents].join("|");
+}
+
+export function storedPayment(row: PaymentRow): StoredPayment {
+  return {
+    dateTime: row.dateTime,
+    day: row.day,
+    settlementId: row.settlementId,
+    type: row.type,
+    orderId: row.orderId,
+    sku: row.sku,
+    description: row.description,
+    qty: row.qty,
+    fulfillment: row.fulfillment,
+    productSalesCents: row.productSalesCents,
+    sellingFeeCents: row.sellingFeeCents,
+    fbaFeeCents: row.fbaFeeCents,
+    otherTransactionFeeCents: row.otherTransactionFeeCents,
+    otherCents: row.otherCents,
+    promotionalRebatesCents: row.promotionalRebatesCents,
+    totalCents: row.totalCents,
+  };
+}
+
+export function dedupePayments(rows: PaymentRow[]): { kept: PaymentRow[]; duplicates: number } {
+  const seen = new Set<string>();
+  const kept: PaymentRow[] = [];
+  let duplicates = 0;
+  for (const row of rows) {
+    const key = paymentFingerprint(row);
+    if (seen.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+    seen.add(key);
+    kept.push(row);
+  }
+  return { kept, duplicates };
+}
+
+function feeParts(row: PaymentRow): number {
+  return row.sellingFeeCents + row.fbaFeeCents + row.otherTransactionFeeCents + row.otherCents + row.promotionalRebatesCents;
+}
+
+function rowEffect(row: PaymentRow): number {
+  if (row.totalCents !== 0) return row.totalCents;
+  return feeParts(row) + row.productSalesCents;
+}
+
+function allocateCost(cost: number, weights: { sku: string; weight: number }[]): Map<string, number> {
+  const positive = weights.filter((row) => row.weight > 0).sort((a, b) => a.sku.localeCompare(b.sku));
+  const out = new Map<string, number>();
+  if (cost === 0 || positive.length === 0) return out;
+  const total = positive.reduce((sum, row) => sum + row.weight, 0);
+  let used = 0;
+  positive.forEach((row, index) => {
+    const share = index === positive.length - 1 ? cost - used : Math.round((cost * row.weight) / total);
+    used += share;
+    out.set(row.sku, (out.get(row.sku) ?? 0) + share);
+  });
+  return out;
+}
+
+type Bucket = {
+  orderUnits: number;
+  refundUnits: number;
+  orderSalesCents: number;
+  refundSalesCents: number;
+  orderSellingFeeCents: number;
+  orderFbaFeeCents: number;
+  signedFees: number;
+  channel: "FBA" | "FBM" | "";
+  shippingCents: number;
+  serviceCents: number;
+  storageCents: number;
+  otherAllocatedCents: number;
+};
+
+function emptyBucket(): Bucket {
+  return {
+    orderUnits: 0,
+    refundUnits: 0,
+    orderSalesCents: 0,
+    refundSalesCents: 0,
+    orderSellingFeeCents: 0,
+    orderFbaFeeCents: 0,
+    signedFees: 0,
+    channel: "",
+    shippingCents: 0,
+    serviceCents: 0,
+    storageCents: 0,
+    otherAllocatedCents: 0,
+  };
+}
+
+export function rollupPaymentFees(rows: PaymentRow[]): SkuFeeRollup[] {
+  const buckets = new Map<string, Bucket>();
+  const orderSales = new Map<string, Map<string, number>>();
+  const shipping: PaymentRow[] = [];
+  const service: PaymentRow[] = [];
+  const storage: PaymentRow[] = [];
+  const adjustments: PaymentRow[] = [];
+  const fbaTxn: PaymentRow[] = [];
+  const bucket = (sku: string) => {
+    const found = buckets.get(sku) ?? emptyBucket();
+    buckets.set(sku, found);
+    return found;
+  };
+  for (const row of rows) {
+    const type = row.type.trim().toLowerCase();
+    if (type === "transfer") continue;
+    const sku = row.sku.trim();
+    if (type === "order" && sku) {
+      const item = bucket(sku);
+      item.orderUnits += row.qty;
+      item.orderSalesCents += row.productSalesCents;
+      item.orderSellingFeeCents += row.sellingFeeCents;
+      item.orderFbaFeeCents += row.fbaFeeCents;
+      item.signedFees += feeParts(row);
+      if (row.channel) item.channel = row.channel;
+      const bySku = orderSales.get(row.orderId) ?? new Map<string, number>();
+      bySku.set(sku, (bySku.get(sku) ?? 0) + row.productSalesCents);
+      orderSales.set(row.orderId, bySku);
+    } else if ((type === "refund" || type === "chargeback refund") && sku) {
+      const item = bucket(sku);
+      item.refundUnits += row.qty;
+      item.refundSalesCents += row.productSalesCents;
+      item.signedFees += feeParts(row);
+    } else if (sku && (type === "adjustment" || type === "fba transaction fees")) {
+      const item = bucket(sku);
+      const direct = feeParts(row);
+      item.signedFees += direct !== 0 ? direct : row.totalCents;
+    } else if (type === "shipping services") shipping.push(row);
+    else if (type === "service fee") service.push(row);
+    else if (type === "fba inventory fee") storage.push(row);
+    else if (type === "adjustment") adjustments.push(row);
+    else if (type === "fba transaction fees") fbaTxn.push(row);
+    else if (sku) {
+      bucket(sku).signedFees += feeParts(row) || row.totalCents;
+    }
+  }
+  const salesWeight = () =>
+    [...buckets.entries()].map(([sku, item]) => ({ sku, weight: item.orderSalesCents }));
+  const fbaWeight = () =>
+    [...buckets.entries()].filter(([, item]) => item.channel === "FBA").map(([sku, item]) => ({ sku, weight: item.orderSalesCents }));
+  const fbmWeight = () =>
+    [...buckets.entries()].filter(([, item]) => item.channel === "FBM").map(([sku, item]) => ({ sku, weight: item.orderSalesCents }));
+  const add = (shares: Map<string, number>, field: "shippingCents" | "serviceCents" | "storageCents" | "otherAllocatedCents") => {
+    for (const [sku, cents] of shares) {
+      const item = bucket(sku);
+      item[field] += cents;
+    }
+  };
+  for (const row of shipping) {
+    const cost = -rowEffect(row);
+    const onOrder = [...(orderSales.get(row.orderId)?.entries() ?? [])].map(([sku, weight]) => ({ sku, weight }));
+    const shares = allocateCost(cost, onOrder.length ? onOrder : fbmWeight().length ? fbmWeight() : salesWeight());
+    if (shares.size === 0 && cost !== 0) add(allocateCost(cost, [{ sku: row.sku || "(no order)", weight: 1 }]), "shippingCents");
+    else add(shares, "shippingCents");
+  }
+  add(allocateCost(service.reduce((sum, row) => sum - rowEffect(row), 0), salesWeight()), "serviceCents");
+  add(allocateCost(storage.reduce((sum, row) => sum - rowEffect(row), 0), fbaWeight().length ? fbaWeight() : salesWeight()), "storageCents");
+  add(allocateCost(adjustments.reduce((sum, row) => sum - rowEffect(row), 0), salesWeight()), "otherAllocatedCents");
+  add(allocateCost(fbaTxn.reduce((sum, row) => sum - rowEffect(row), 0), fbaWeight().length ? fbaWeight() : salesWeight()), "otherAllocatedCents");
+  return [...buckets.entries()]
+    .map(([sku, item]) => {
+      const feeExpenseCents = -item.signedFees + item.shippingCents + item.serviceCents + item.storageCents + item.otherAllocatedCents;
+      return {
+        sku,
+        orderUnits: item.orderUnits,
+        refundUnits: item.refundUnits,
+        netUnits: item.orderUnits - item.refundUnits,
+        orderSalesCents: item.orderSalesCents,
+        refundSalesCents: item.refundSalesCents,
+        productSalesCents: item.orderSalesCents + item.refundSalesCents,
+        avgSellingFeePerUnitCents: item.orderUnits > 0 ? Math.round(-item.orderSellingFeeCents / item.orderUnits) || 0 : null,
+        avgFbaFeePerUnitCents: item.orderUnits > 0 ? Math.round(-item.orderFbaFeeCents / item.orderUnits) || 0 : null,
+        shippingCents: item.shippingCents,
+        serviceCents: item.serviceCents,
+        storageCents: item.storageCents,
+        otherAllocatedCents: item.otherAllocatedCents,
+        feeExpenseCents,
+      };
+    })
+    .sort((a, b) => a.sku.localeCompare(b.sku));
+}
+
+export function netMarginCents(rollup: SkuFeeRollup, unitCostCents: number | null): { costCents: number | null; marginCents: number | null } {
+  if (unitCostCents == null) return { costCents: null, marginCents: null };
+  const costCents = unitCostCents * rollup.netUnits;
+  return { costCents, marginCents: rollup.productSalesCents - rollup.feeExpenseCents - costCents };
+}
+
+function feePlug(lines: DraftLine[]): DraftLine[] {
+  const kept = lines.filter((line) => line.debitCents > 0 || line.creditCents > 0);
+  const debit = kept.reduce((sum, line) => sum + line.debitCents, 0);
+  const credit = kept.reduce((sum, line) => sum + line.creditCents, 0);
+  if (debit === credit) return kept;
+  if (debit > credit) kept.push({ accountCode: CODES.amazonFees, debitCents: 0, creditCents: debit - credit, memo: "Amazon fees" });
+  else kept.push({ accountCode: CODES.amazonFees, debitCents: credit - debit, creditCents: 0, memo: "Amazon fees" });
+  return kept;
+}
+
+export function settlementJournal(input: { invoiceBalanceCents: number; orderTotalCents: number }): DraftLine[] | null {
+  const balance = input.invoiceBalanceCents;
+  const net = input.orderTotalCents;
+  if (balance <= 0) return null;
+  const lines: DraftLine[] = [{ accountCode: CODES.ar, debitCents: 0, creditCents: balance, memo: "Amazon order settled" }];
+  if (net > 0) lines.push({ accountCode: CODES.amazonClearing, debitCents: net, creditCents: 0, memo: "Amazon holds this order" });
+  else if (net < 0) lines.push({ accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -net, memo: "Amazon holds this order" });
+  const fee = balance - net;
+  if (fee > 0) lines.push({ accountCode: CODES.amazonFees, debitCents: fee, creditCents: 0, memo: "Amazon fees on the order" });
+  else if (fee < 0) lines.push({ accountCode: CODES.amazonFees, debitCents: 0, creditCents: -fee, memo: "Amazon fees on the order" });
+  return lines;
+}
+
+export function transferJournal(totalCents: number): DraftLine[] | null {
+  if (totalCents === 0) return null;
+  if (totalCents < 0) {
+    return [
+      { accountCode: CODES.cash, debitCents: -totalCents, creditCents: 0, memo: "Amazon payout" },
+      { accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -totalCents, memo: "Amazon payout" },
+    ];
+  }
+  return [
+    { accountCode: CODES.amazonClearing, debitCents: totalCents, creditCents: 0, memo: "Amazon pulled funds" },
+    { accountCode: CODES.cash, debitCents: 0, creditCents: totalCents, memo: "Amazon pulled funds" },
+  ];
+}
+
+export function feeRowJournal(totalCents: number): DraftLine[] | null {
+  if (totalCents === 0) return null;
+  if (totalCents < 0) {
+    return [
+      { accountCode: CODES.amazonFees, debitCents: -totalCents, creditCents: 0, memo: "Amazon fee" },
+      { accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -totalCents, memo: "Amazon fee" },
+    ];
+  }
+  return [
+    { accountCode: CODES.amazonClearing, debitCents: totalCents, creditCents: 0, memo: "Amazon fee credit" },
+    { accountCode: CODES.amazonFees, debitCents: 0, creditCents: totalCents, memo: "Amazon fee credit" },
+  ];
+}
+
+export function refundJournal(row: PaymentRow): DraftLine[] | null {
+  const lines: DraftLine[] = [];
+  if (row.productSalesCents < 0) lines.push({ accountCode: CODES.sales, debitCents: -row.productSalesCents, creditCents: 0, memo: "Amazon refund" });
+  else if (row.productSalesCents > 0) lines.push({ accountCode: CODES.sales, debitCents: 0, creditCents: row.productSalesCents, memo: "Amazon refund" });
+  const fees = feeParts(row);
+  if (fees > 0) lines.push({ accountCode: CODES.amazonFees, debitCents: 0, creditCents: fees, memo: "Amazon returned a fee" });
+  else if (fees < 0) lines.push({ accountCode: CODES.amazonFees, debitCents: -fees, creditCents: 0, memo: "Amazon fee on a refund" });
+  if (row.totalCents < 0) lines.push({ accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -row.totalCents, memo: "Amazon balance" });
+  else if (row.totalCents > 0) lines.push({ accountCode: CODES.amazonClearing, debitCents: row.totalCents, creditCents: 0, memo: "Amazon balance" });
+  const balanced = feePlug(lines);
+  return balanced.length >= 2 ? balanced : null;
+}
