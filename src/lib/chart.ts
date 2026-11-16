@@ -23,6 +23,9 @@ export const CODES = {
   amazonFees: "6100",
   bankFees: "6200",
   adjustment: "6300",
+  wages: "6400",
+  employerTax: "6410",
+  payrollLiab: "2300",
 } as const;
 
 export type AccountTypeName = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "COGS" | "EXPENSE";
@@ -40,6 +43,7 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.ap, name: "Money we owe suppliers", type: "LIABILITY" },
   { code: CODES.grni, name: "Received, not yet billed", type: "LIABILITY" },
   { code: CODES.tax, name: "Sales tax to send the state", type: "LIABILITY" },
+  { code: CODES.payrollLiab, name: "Payroll taxes to send", type: "LIABILITY" },
   { code: CODES.equity, name: "Owner's equity", type: "EQUITY" },
   { code: CODES.obe, name: "Opening balances", type: "EQUITY" },
   { code: CODES.sales, name: "Product sales", type: "INCOME" },
@@ -52,6 +56,8 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.amazonFees, name: "Amazon fees", type: "EXPENSE" },
   { code: CODES.bankFees, name: "Bank fees", type: "EXPENSE" },
   { code: CODES.adjustment, name: "Inventory adjustments", type: "EXPENSE" },
+  { code: CODES.wages, name: "Wages", type: "EXPENSE" },
+  { code: CODES.employerTax, name: "Employer payroll taxes", type: "EXPENSE" },
 ];
 
 export function inventoryAccount(kind: "RAW" | "FINISHED" | "UTILITY" | "PACKAGING"): string | null {
@@ -68,6 +74,8 @@ export const SEQUENCES: { name: string; prefix: string; start: number }[] = [
   { name: "invoice-S", prefix: "S", start: 1 },
   { name: "invoice-A", prefix: "A", start: 1 },
   { name: "invoice-W", prefix: "W", start: 1 },
+  { name: "invoice-E", prefix: "E", start: 1 },
+  { name: "payrun", prefix: "PAY", start: 1001 },
   { name: "receipt-pay", prefix: "PMT", start: 1001 },
   { name: "po", prefix: "PO", start: 1001 },
   { name: "receipt", prefix: "RCV", start: 1001 },

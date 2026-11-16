@@ -9,8 +9,18 @@ import { createBatch, finishBatch, releaseLot, rejectLot, startBatch } from "@/l
 import { acceptQuote, cancelOrder, invoiceDelivery, markQuote, payInvoice, reviseQuote, saveQuote, shipOrder, voidInvoice } from "@/lib/services/sales";
 import type { CreditTermName, DiscountKindName, IncotermName } from "@/lib/commercial";
 import { CREDIT_TERMS, INCOTERMS } from "@/lib/commercial";
+import { prisma } from "@/lib/db";
 import { requireCan } from "./actor";
-import { fail, finish } from "./http";
+import { fail, finish, succeed } from "./http";
+
+export async function setProductPathAction(formData: FormData) {
+  await requireCan("editMasters");
+  const id = text(formData, "id");
+  const path = text(formData, "path");
+  if (path !== "RESALE" && path !== "REPACK" && path !== "MANUFACTURED") fail(`/products/${id}`, "Choose resale, repack, or manufactured.");
+  await prisma.product.update({ where: { id }, data: { path } });
+  succeed(`/products/${id}`, path === "RESALE" ? "This item is sold as-is." : path === "REPACK" ? "This item is repacked. The formula does not change." : "This item is manufactured from a formula.");
+}
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();

@@ -62,6 +62,7 @@ describe("executive dashboard", () => {
       ["S", 10000],
       ["A", 5000],
       ["W", 2000],
+      ["E", 0],
     ]);
     expect(dash.marginPercent).toBe(marginPercent(17000, 5500));
     expect(dash.marginPercent).toBe(67.6);

@@ -1,5 +1,5 @@
 export type MrpKind = "RAW" | "FINISHED" | "PACKAGING" | "UTILITY";
-export type ChannelCode = "S" | "A" | "W";
+export type ChannelCode = "S" | "A" | "W" | "E";
 export type ExceptionKind = "LATE" | "EXPEDITE" | "CANCEL";
 
 export type MrpItem = {
@@ -64,8 +64,9 @@ export function orderQty(need: number, moq: number, multiple: number): number {
 }
 
 export function channelOf(channel: string): ChannelCode {
-  if (channel === "AMAZON") return "A";
-  if (channel === "WALMART") return "W";
+  if (channel === "AMAZON" || channel === "A") return "A";
+  if (channel === "WALMART" || channel === "W") return "W";
+  if (channel === "EXPORT" || channel === "E") return "E";
   return "S";
 }
 

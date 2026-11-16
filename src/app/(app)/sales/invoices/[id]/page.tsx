@@ -38,6 +38,8 @@ export default async function InvoicePage({
       <p className="lede">{invoice.party.name} · {INVOICE_LABEL[invoice.status] ?? invoice.status} · due {formatDate(invoice.dueOn)}</p>
       <p>{invoice.incoterm}{invoice.namedPlace ? ` ${invoice.namedPlace}` : ""}. {termsLabel({ term: invoice.creditTerm, customNetDays: invoice.customNetDays, earlyPayBps: invoice.earlyPayBps, earlyPayDays: invoice.earlyPayDays })}. Currency {invoice.currency}.</p>
       {invoice.marketplaceOrderId && <p>Marketplace order {invoice.marketplaceOrderId}.</p>}
+      {invoice.channel === "AMAZON" && <p>Amazon {invoice.fulfillment === "FBM" ? "FBM — stock stays in the SPER warehouse until it ships" : "FBA — stock is at Amazon"}.</p>}
+      {invoice.channel === "EXPORT" && <p><Link href={`/print/export/${invoice.id}`}>Commercial invoice, packing list, and certificate of origin</Link>. No US sales tax.</p>}
       {invoice.orderId && <p><Link href={`/sales/orders/${invoice.orderId}`}>Order</Link>{invoice.deliveryId ? <> · <Link href={`/sales/deliveries/${invoice.deliveryId}`}>Delivery</Link></> : null}</p>}
       <Flash error={query.error} notice={query.notice} />
       <div className="wrap"><table>

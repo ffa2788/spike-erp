@@ -98,7 +98,7 @@ export async function buildPlan(asOf = toDateInput(new Date())) {
     itemId: row.productId,
     date: toDateInput(row.weekOf),
     qty: Number(row.qty),
-    channel: (row.channel === "A" || row.channel === "W" ? row.channel : "S") as ChannelCode,
+    channel: (row.channel === "A" || row.channel === "W" || row.channel === "E" ? row.channel : "S") as ChannelCode,
     source: "FORECAST",
   }));
   const independent = independentDemand({ asOf, orders: ordersDemand, history, manual });

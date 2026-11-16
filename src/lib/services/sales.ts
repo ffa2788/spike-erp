@@ -559,13 +559,15 @@ export async function invoiceDeliveryTx(
   if ("error" in goods) return err(goods.error);
   const freightShare = orderGoods > 0 ? Math.round(delivery.order.freightCents * (shippedGross / orderGoods)) : delivery.order.freightCents;
   const insuranceShare = orderGoods > 0 ? Math.round(delivery.order.insuranceCents * (shippedGross / orderGoods)) : delivery.order.insuranceCents;
-  const channel = party.channel === "AMAZON" || party.channel === "WALMART" ? party.channel : delivery.order.party.channel;
+  const channel = party.channel === "AMAZON" || party.channel === "WALMART" || party.channel === "EXPORT" ? party.channel : delivery.order.party.channel;
   const marketplace = channel === "AMAZON" || channel === "WALMART";
+  const exportSale = channel === "EXPORT";
+  const fulfillment = channel === "AMAZON" ? "FBA" : channel === "WALMART" ? "FBM" : "WAREHOUSE";
   const taxLines = goods.lines.map((line) => ({ amountCents: line.afterDocCents, taxable: line.taxable }));
-  if (!marketplace && freightShare + insuranceShare > 0 && goods.lines.some((line) => line.taxable)) {
+  if (!marketplace && !exportSale && freightShare + insuranceShare > 0 && goods.lines.some((line) => line.taxable)) {
     taxLines.push({ amountCents: freightShare + insuranceShare, taxable: true });
   }
-  const tax = marketplace
+  const tax = marketplace || exportSale
     ? { taxableCents: 0, taxCents: 0, exemptionApplied: false, exemptionNumber: "", breakdown: [] as { name: string; rateBps: number; taxCents: number }[] }
     : computeSalesTax({
         shipState: delivery.order.shipState,
@@ -601,6 +603,7 @@ export async function invoiceDeliveryTx(
       exemptionApplied: tax.exemptionApplied,
       exemptionNumber: tax.exemptionApplied ? party.exemptionNumber : "",
       channel,
+      fulfillment,
       marketplaceOrderId: marketplace ? delivery.order.customerPo : "",
       incoterm: delivery.order.incoterm,
       namedPlace: delivery.order.namedPlace,
@@ -618,8 +621,10 @@ export async function invoiceDeliveryTx(
       notes: channel === "AMAZON"
         ? `Amazon order ${delivery.order.customerPo}. SPIKE did not add sales tax.`
         : channel === "WALMART"
-          ? `Walmart order ${delivery.order.customerPo}. SPIKE did not add sales tax.`
-          : "",
+          ? `Walmart order ${delivery.order.customerPo}. SPIKE did not add Florida sales tax. Walmart is FBM.`
+          : channel === "EXPORT"
+            ? "Export sale. No US sales tax. Commercial invoice, packing list, and certificate of origin are on the print page."
+            : "",
       isExample: delivery.isExample,
       lines: {
         create: invoiceLines.map((line, index) => ({
@@ -862,6 +867,7 @@ export async function postAmazonHistoryInvoice(
     date: Date;
     shipTo: string;
     lines: { productId: string; description: string; qty: number; netCents: number }[];
+    fulfillment?: "FBA" | "FBM";
   },
 ): Promise<Result<{ invoiceId: string; number: string }>> {
   const denied = deny(actor, "importData");
@@ -891,6 +897,7 @@ export async function postAmazonHistoryInvoice(
         balanceCents: subtotalCents,
         goodsNetCents: subtotalCents,
         channel: "AMAZON",
+        fulfillment: input.fulfillment ?? "FBA",
         marketplaceOrderId: input.orderId,
         currency: "USD",
         notes: `Amazon All Orders import. ${input.shipTo}. Amazon collected any sales tax. No lot was relieved.`,

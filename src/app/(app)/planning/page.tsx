@@ -74,7 +74,7 @@ export default async function PlanningPage({
         </label>
         <div className="grid-2">
           <label className="field">Channel
-            <select name="channel"><option value="S">S — direct</option><option value="A">A — Amazon</option><option value="W">W — Walmart</option></select>
+            <select name="channel"><option value="S">S — direct</option><option value="A">A — Amazon</option><option value="W">W — Walmart</option><option value="E">E — export</option></select>
           </label>
           <label className="field">Week of<input type="date" name="weekOf" required /></label>
           <label className="field">Quantity<input name="qty" required /></label>

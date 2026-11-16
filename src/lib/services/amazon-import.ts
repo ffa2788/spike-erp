@@ -33,7 +33,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     mapped: new Set([...mapBySku.keys()]),
   });
   const invoices: string[] = [];
-  const pending = new Map<string, { date: Date; shipTo: string; lines: { productId: string; description: string; qty: number; netCents: number; itemKey: string }[] }>();
+  const pending = new Map<string, { date: Date; shipTo: string; fulfillment: "FBA" | "FBM"; lines: { productId: string; description: string; qty: number; netCents: number; itemKey: string }[] }>();
   for (const row of kept) {
     const key = `${row.amazonOrderId}|${row.orderItemId}`;
     const prior = existingByKey.get(key);
@@ -94,7 +94,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     });
     if (row.shipped && !row.cancelled && row.netCents > 0 && productId && !saved.invoiceId) {
       const date = parseDateInput(row.purchaseDate) ?? new Date();
-      const bucket = pending.get(row.amazonOrderId) ?? { date, shipTo: `${row.shipCity}, ${row.shipState} ${row.shipPostalCode}`.trim(), lines: [] };
+      const bucket = pending.get(row.amazonOrderId) ?? { date, shipTo: `${row.shipCity}, ${row.shipState} ${row.shipPostalCode}`.trim(), fulfillment: row.fulfillment === "FBM" ? "FBM" as const : "FBA" as const, lines: [] };
       bucket.lines.push({ productId, description: row.productName || row.sku, qty: row.qty, netCents: row.netCents, itemKey: saved.id });
       pending.set(row.amazonOrderId, bucket);
     }
@@ -105,6 +105,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
       orderId,
       date: bucket.date,
       shipTo: bucket.shipTo,
+      fulfillment: bucket.fulfillment,
       lines: bucket.lines.map(({ itemKey: _item, ...line }) => line),
     });
     if (!posted.ok) return err(posted.error);

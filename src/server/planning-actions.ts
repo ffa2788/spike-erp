@@ -28,7 +28,7 @@ export async function saveForecast(formData: FormData) {
   const week = parseDateInput(text(formData, "weekOf"));
   const qty = Number(text(formData, "qty"));
   if (!productId || !week || !(qty > 0)) fail("/planning", "Choose a product, a week, and a quantity.");
-  if (!["S", "A", "W"].includes(channel)) fail("/planning", "Channel must be S, A, or W.");
+  if (!["S", "A", "W", "E"].includes(channel)) fail("/planning", "Channel must be S, A, W, or E.");
   await prisma.demandForecast.upsert({
     where: { productId_channel_weekOf: { productId, channel, weekOf: week } },
     update: { qty },

@@ -4,7 +4,8 @@ import { Flash, readQuery } from "@/components/ui";
 import { rollUpCost } from "@/lib/costing";
 import { prisma } from "@/lib/db";
 import { formatDate, usdPrecise } from "@/lib/format";
-import { defaultFormulaAction, formulaAction, saveProductAction, specsAction } from "@/server/work-actions";
+import { PRODUCT_PATHS, pathShowsFormula, pathSteps } from "@/lib/product-path";
+import { defaultFormulaAction, formulaAction, saveProductAction, setProductPathAction, specsAction } from "@/server/work-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,26 @@ export default async function ProductPage({
       <p className="lede">{product.sku} · {product.unit}</p>
       <Flash error={query.error} notice={query.notice} />
       {product.kind === "FINISHED" && (
+        <>
+          <h2>How SPER handles this</h2>
+          <p>Raw material is purchased, then it is resold, repacked, or manufactured.</p>
+          <form action={setProductPathAction} className="row">
+            <input type="hidden" name="id" value={product.id} />
+            <label className="field">Type
+              <select name="path" defaultValue={product.path}>
+                {PRODUCT_PATHS.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+              </select>
+            </label>
+            <button className="btn secondary" type="submit">Save the type</button>
+          </form>
+          <ol>
+            {pathSteps(product.path).map((step) => <li key={step.title}><strong>{step.title}.</strong> {step.detail}</li>)}
+          </ol>
+          {product.path !== "RESALE" && <p><Link href={`/products/${product.id}/formula`}>Presentations and packaging cost</Link></p>}
+          {pathShowsFormula(product.path) && <p><Link href={`/products/${product.id}/formula`}>Formula</Link></p>}
+        </>
+      )}
+      {product.kind === "FINISHED" && pathShowsFormula(product.path) && (
         <div className={`banner ${rolled.status === "OK" ? "good" : "bad"}`}>
           {rolled.status === "OK" && rolled.costPerUnit != null
             ? `Recipe cost today is ${usdPrecise(rolled.costPerUnit)} per ${product.unit}. This includes sub-recipes.`

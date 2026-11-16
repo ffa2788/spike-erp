@@ -49,6 +49,7 @@ function summarize(invoices: DashInvoice[]) {
     S: { salesCents: 0, cogsCents: 0 },
     A: { salesCents: 0, cogsCents: 0 },
     W: { salesCents: 0, cogsCents: 0 },
+    E: { salesCents: 0, cogsCents: 0 },
   };
   const products = new Map<string, { name: string; salesCents: number; cogsCents: number }>();
   const customers = new Map<string, { salesCents: number; cogsCents: number }>();
@@ -148,9 +149,9 @@ export function executiveDashboard(input: {
     mtd: { ...mtd, versus: comparePeriods(mtd.salesCents, priorMtd.salesCents) },
     ytd: { ...ytd, versus: comparePeriods(ytd.salesCents, priorYtd.salesCents) },
     marginPercent: marginPercent(ytd.salesCents, ytd.cogsCents),
-    channels: (["S", "A", "W"] as const).map((code) => ({
+    channels: (["S", "A", "W", "E"] as const).map((code) => ({
       code,
-      label: code === "S" ? "Direct" : code === "A" ? "Amazon" : "Walmart",
+      label: code === "S" ? "Direct" : code === "A" ? "Amazon" : code === "W" ? "Walmart" : "Export",
       salesCents: ytd.channels[code].salesCents,
       marginPercent: marginPercent(ytd.channels[code].salesCents, ytd.channels[code].cogsCents),
     })),

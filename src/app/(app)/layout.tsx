@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span>Sales, planning, inventory</span>
           </div>
         </div>
-        <SideNav />
+        <SideNav role={user.role} />
         <div className="who">
           <strong>{user.name}</strong>
           <span>{ROLE_LABEL[user.role]}</span>
@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main>
         <form className="no-print" action="/search" style={{ marginBottom: "1rem" }}>
           <label className="field">Find an invoice, order, or marketplace number
-            <input name="q" placeholder="S-000001 or an Amazon order id" />
+            <input name="q" placeholder="S-000001, A-, W-, or E-" />
           </label>
           <button className="btn secondary" type="submit">Search</button>
         </form>

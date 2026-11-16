@@ -44,6 +44,8 @@ export default async function CustomerPage({
               <option value="DISTRIBUTOR">Distributor</option>
               <option value="MUNICIPAL">Municipal</option>
               <option value="AMAZON">Amazon</option>
+              <option value="WALMART">Walmart FBM</option>
+              <option value="EXPORT">Export — Caribbean or Mexico</option>
             </select>
           </label>
           <label className="field">Email<input name="email" defaultValue={party.email} /></label>

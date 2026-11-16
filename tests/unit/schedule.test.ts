@@ -12,7 +12,7 @@ function sku(partial: Partial<ScheduleSku> & Pick<ScheduleSku, "id">): ScheduleS
     coverDays: 14,
     salesQty: 0,
     windowDays: 56,
-    salesByChannel: { S: 0, A: 0, W: 0 },
+    salesByChannel: { S: 0, A: 0, W: 0, E: 0 },
     openOrders: 0,
     amazonOpenOrders: 0,
     supermarket: 0,
@@ -34,7 +34,7 @@ describe("suggested production schedule", () => {
         sku({
           id: "jug",
           salesQty: 560,
-          salesByChannel: { S: 280, A: 140, W: 140 },
+          salesByChannel: { S: 280, A: 140, W: 140, E: 0 },
           openOrders: 20,
           amazonOpenOrders: 8,
           supermarket: 40,
@@ -64,7 +64,7 @@ describe("suggested production schedule", () => {
       asOf: "2026-11-14",
       skus: [
         sku({ id: "full", salesQty: 56, supermarket: 1000, multiple: 1, coverDays: 14 }),
-        sku({ id: "empty", salesQty: 0, openOrders: 3, supermarket: 0, multiple: 1, coverDays: 14, fbaFulfillable: 0, amazonOpenOrders: 2, salesByChannel: { S: 0, A: 0, W: 0 } }),
+        sku({ id: "empty", salesQty: 0, openOrders: 3, supermarket: 0, multiple: 1, coverDays: 14, fbaFulfillable: 0, amazonOpenOrders: 2, salesByChannel: { S: 0, A: 0, W: 0, E: 0 } }),
       ],
     });
     expect(rows[0].id).toBe("empty");

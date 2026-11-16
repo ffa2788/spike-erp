@@ -49,7 +49,7 @@ export function can(role: RoleName, action: Action): boolean {
 
 export const ROLE_LABEL: Record<RoleName, string> = {
   OWNER: "Owner",
-  PARTNER: "Partner / accounting",
-  WAREHOUSE: "Warehouse",
+  PARTNER: "Office",
+  WAREHOUSE: "Manufacturing",
   READONLY: "Read only",
 };

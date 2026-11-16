@@ -23,6 +23,8 @@ export default async function NewCustomerPage({
             <option value="DISTRIBUTOR">Distributor</option>
             <option value="MUNICIPAL">Municipal</option>
             <option value="AMAZON">Amazon</option>
+            <option value="WALMART">Walmart FBM</option>
+            <option value="EXPORT">Export — Caribbean or Mexico</option>
           </select>
         </label>
         <label className="field">Contact<input name="contactName" /></label>

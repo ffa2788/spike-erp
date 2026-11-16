@@ -116,6 +116,29 @@ enum Channel {
   MUNICIPAL
   AMAZON
   WALMART
+  EXPORT
+}
+
+enum ProductPath {
+  RESALE
+  REPACK
+  MANUFACTURED
+}
+
+enum FulfillmentPlace {
+  WAREHOUSE
+  FBA
+  FBM
+}
+
+enum PayType {
+  HOURLY
+  SALARY
+}
+
+enum PayRunStatus {
+  DRAFT
+  POSTED
 }
 
 enum Incoterm {
@@ -258,6 +281,7 @@ model Product {
   name              String
   nameKey           String      @unique
   kind              ProductKind
+  path              ProductPath @default(MANUFACTURED)
   form              ProductForm @default(OTHER)
   specificGravity   Decimal?    @db.Decimal(8, 4)
   unit              String
@@ -617,6 +641,7 @@ model Invoice {
   exemptionApplied Boolean       @default(false)
   exemptionNumber  String        @default("")
   channel            Channel       @default(DIRECT)
+  fulfillment        FulfillmentPlace @default(WAREHOUSE)
   marketplaceOrderId String        @default("")
   incoterm           Incoterm      @default(EXW)
   namedPlace         String        @default("")
@@ -1134,4 +1159,62 @@ model SafetyDocument {
 
   @@unique([productId, kind, version])
   @@index([kind, status])
+}
+
+model Employee {
+  id                     String   @id @default(cuid())
+  name                   String
+  payType                PayType
+  rateCents              Int
+  federalWithholdingBps  Int      @default(0)
+  active                 Boolean  @default(true)
+  isExample              Boolean  @default(false)
+  stubs                  PayStub[]
+}
+
+model PayrollTaxTable {
+  id                           String    @id @default("current")
+  reviewed                     Boolean   @default(false)
+  socialSecurityBps            Int       @default(620)
+  socialSecurityWageBaseCents  Int       @default(17610000)
+  medicareBps                  Int       @default(145)
+  futaBps                      Int       @default(60)
+  futaWageBaseCents            Int       @default(700000)
+  floridaBps                   Int       @default(270)
+  floridaWageBaseCents         Int       @default(700000)
+  note                         String    @default("Example rates. The accountant must review this table before a calculated pay run can be posted. SPIKE does not file payroll taxes.")
+}
+
+model PayRun {
+  id        String       @id @default(cuid())
+  number    String       @unique
+  periodStart DateTime
+  periodEnd   DateTime
+  payDate     DateTime
+  status    PayRunStatus @default(DRAFT)
+  source    String       @default("CALCULATOR")
+  journalId String?
+  notes     String       @default("")
+  isExample Boolean      @default(false)
+  stubs     PayStub[]
+}
+
+model PayStub {
+  id                    String   @id @default(cuid())
+  runId                 String
+  run                   PayRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee @relation(fields: [employeeId], references: [id])
+  hours                 Decimal  @default(0) @db.Decimal(8, 2)
+  grossCents            Int
+  federalWithholdingCents Int
+  socialSecurityCents   Int
+  medicareCents         Int
+  employerSocialSecurityCents Int
+  employerMedicareCents Int
+  futaCents             Int
+  floridaCents          Int
+  netCents              Int
+
+  @@unique([runId, employeeId])
 }

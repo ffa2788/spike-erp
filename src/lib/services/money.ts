@@ -37,6 +37,7 @@ export async function ensureFoundation(actor: Actor): Promise<Result<{ accounts:
       ["DOCK", "Shipping dock", true],
       ["REC", "Receiving floor", false],
       ["AMAZON", "Amazon FBA", false],
+      ["IN_TRANSIT", "In transit", false],
     ] as const;
     for (const [code, name, shippable] of locations) {
       await tx.location.upsert({ where: { code }, update: { name, shippable }, create: { code, name, shippable } });

@@ -52,7 +52,8 @@ export default async function ReportPage({
                 <option value="ALL">All channels</option>
                 <option value="S">S — direct SPER</option>
                 <option value="A">A — Amazon</option>
-                <option value="W">W — Walmart</option>
+                <option value="W">W — Walmart FBM</option>
+                <option value="E">E — Export</option>
               </select>
             </label>
           )}
@@ -111,6 +112,12 @@ async function SalesBlock({ from, to, margins, channel }: { from: string; to: st
       <table>
         <tbody>{report.byChannel.map((row) => <tr key={row.name}><td>{row.name}</td><td>{usd(row.amountCents)}</td></tr>)}</tbody>
       </table>
+      <p>
+        Amazon FBA {usd(filtered.filter((invoice) => invoice.channel === "AMAZON" && invoice.fulfillment === "FBA").reduce((sum, invoice) => sum + invoice.subtotalCents, 0))}
+        {" · "}
+        Amazon FBM {usd(filtered.filter((invoice) => invoice.channel === "AMAZON" && invoice.fulfillment === "FBM").reduce((sum, invoice) => sum + invoice.subtotalCents, 0))}.
+        FBA quantity sits at Amazon. FBM quantity stays in the SPER warehouse until it ships. In-transit stock is its own location.
+      </p>
     </>
   );
 }

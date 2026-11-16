@@ -47,7 +47,7 @@ export async function wipeDatabase() {
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
       "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast",
-      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "PayStub", "PayRun", "Employee", "PayrollTaxTable", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
       "AuditLog", "LoginAttempt", "CompanyProfile", "User"
     RESTART IDENTITY CASCADE
   `);
@@ -656,6 +656,15 @@ export async function seedDemo() {
     }),
     "equipment",
   );
+  await prisma.product.updateMany({ where: { sku: { in: ["RUST-PREV", "POLY-LIQ", "POLY-BEAD", "RUST-REM", "LAWN", "RUST-1G", "POLY-LIQ-1G", "POLY-BEAD-50"] } }, data: { path: "MANUFACTURED" } });
+  await prisma.employee.createMany({
+    data: [
+      { name: "Frank Abbott", payType: "SALARY", rateCents: 400000, federalWithholdingBps: 1000, isExample: true },
+      { name: "Office partner", payType: "SALARY", rateCents: 300000, federalWithholdingBps: 1000, isExample: true },
+      { name: "Trevor", payType: "HOURLY", rateCents: 2500, federalWithholdingBps: 800, isExample: true },
+    ],
+  });
+  await prisma.payrollTaxTable.upsert({ where: { id: "current" }, update: {}, create: {} });
   await prisma.fixedAsset.create({
     data: {
       description: "Example tote filler",

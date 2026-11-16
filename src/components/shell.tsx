@@ -2,58 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { navForRole } from "@/lib/roles";
+import type { RoleName } from "@/lib/permissions";
 
-const groups = [
-  {
-    label: "Today",
-    links: [{ href: "/", label: "What needs attention" }],
-  },
-  {
-    label: "Work",
-    links: [
-      { href: "/sales", label: "Sales" },
-      { href: "/sales/amazon", label: "Amazon" },
-      { href: "/sales/walmart", label: "Walmart" },
-      { href: "/purchasing", label: "Purchasing" },
-      { href: "/production", label: "Production" },
-      { href: "/inventory", label: "Inventory" },
-      { href: "/planning", label: "Planning" },
-      { href: "/planning/coverage", label: "Coverage" },
-    ],
-  },
-  {
-    label: "Records",
-    links: [
-      { href: "/customers", label: "Customers" },
-      { href: "/vendors", label: "Suppliers" },
-      { href: "/products", label: "Products" },
-      { href: "/documents", label: "TDS and SDS" },
-    ],
-  },
-  {
-    label: "Books",
-    links: [
-      { href: "/money", label: "Money" },
-      { href: "/money/reconcile", label: "Check the bank" },
-      { href: "/reports", label: "Reports" },
-      { href: "/tax", label: "Tax Center" },
-    ],
-  },
-  {
-    label: "Setup",
-    links: [
-      { href: "/import", label: "Bring in data" },
-      { href: "/settings/nsf", label: "NSF listing" },
-      { href: "/settings", label: "Settings" },
-    ],
-  },
-];
-
-export function SideNav() {
+export function SideNav({ role }: { role: RoleName }) {
   const path = usePathname();
+  const visible = navForRole(role);
   return (
     <nav>
-      {groups.map((group) => (
+      {visible.map((group) => (
         <div key={group.label}>
           <div className="nav-group">{group.label}</div>
           {group.links.map((link) => {

@@ -21,6 +21,7 @@ export const PACKAGE_PRESETS: {
   { code: "LIQ-265", form: "LIQUID", label: "265 gal tote", gallons: 265, netLb: null },
   { code: "PWD-25KG", form: "POWDER", label: "25 kg bag", gallons: null, netLb: round4(25 * LB_PER_KG) },
   { code: "PWD-50LB", form: "POWDER", label: "50 lb bag", gallons: null, netLb: 50 },
+  { code: "JAR-1", form: "POWDER", label: "1 lb jar", gallons: null, netLb: 1 },
 ];
 
 function round4(value: number): number {

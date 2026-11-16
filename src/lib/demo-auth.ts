@@ -15,15 +15,9 @@ export const DEMO_USERS = [
     totpSecret: "LF2XI7OMRHPZRQPRLIJDFC3PBKWIPM7O",
   },
   {
-    email: "warehouse@sper.example",
-    name: "Warehouse Lead",
+    email: "trevor@sper.example",
+    name: "Trevor",
     role: "WAREHOUSE" as const,
     totpSecret: "35HHBJMQDFOXMDSFGM5NNM7Y5EGAJUH5",
-  },
-  {
-    email: "readonly@sper.example",
-    name: "Read Only",
-    role: "READONLY" as const,
-    totpSecret: "7KPYKR3E24UGXPZSUKG7H62Q3XIF3UTR",
   },
 ];

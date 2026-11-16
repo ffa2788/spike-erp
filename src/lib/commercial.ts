@@ -63,9 +63,10 @@ export function quoteLabel(number: string, revision: string): string {
   return `${number} rev ${revision}`;
 }
 
-export function channelPrefix(channel: string): "S" | "A" | "W" {
+export function channelPrefix(channel: string): "S" | "A" | "W" | "E" {
   if (channel === "AMAZON") return "A";
   if (channel === "WALMART") return "W";
+  if (channel === "EXPORT") return "E";
   return "S";
 }
 

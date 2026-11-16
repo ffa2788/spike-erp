@@ -97,6 +97,7 @@ describe("incoterms, revisions, and invoice numbers", () => {
     expect(formatInvoiceNumber("AMAZON", 1)).toBe("A-000001");
     expect(formatInvoiceNumber("WALMART", 2)).toBe("W-000002");
     expect(channelPrefix("MUNICIPAL")).toBe("S");
+    expect(channelPrefix("EXPORT")).toBe("E");
   });
 
   it("leaves Walmart disconnected until both credentials exist and does not invent orders", () => {

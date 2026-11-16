@@ -39,7 +39,7 @@ export async function buildSchedule(asOf = toDateInput(new Date()), windowWeeks 
       .sort((a, b) => (a.expiresOn ?? "9999").localeCompare(b.expiresOn ?? "9999"))[0]?.lotNumber ?? "";
   const salesOf = (id: string) => {
     const rows = lines.filter((line) => line.productId === id);
-    const byChannel = { S: 0, A: 0, W: 0 };
+    const byChannel = { S: 0, A: 0, W: 0, E: 0 };
     for (const row of rows) byChannel[channelOf(row.invoice.channel)] += Number(row.qty);
     return { total: byChannel.S + byChannel.A + byChannel.W, byChannel };
   };

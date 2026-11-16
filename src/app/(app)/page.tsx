@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Flash } from "@/components/ui";
+import { roleMayOpen } from "@/lib/roles";
+import { requireActor } from "@/server/actor";
 import { buildAttention } from "@/lib/attention";
 import { prisma } from "@/lib/db";
 import { toDateInput, todayInput } from "@/lib/dates";
@@ -21,6 +23,9 @@ export default async function HomePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await readQuery(searchParams);
+  const user = await requireActor();
+  if (user.role === "WAREHOUSE") return <TrevorHome error={query.error} notice={query.notice} />;
+  const employeeCount = user.role === "PARTNER" ? await prisma.employee.count({ where: { active: true } }) : 0;
   const today = todayInput();
   const [books, stock, bank, products, formulas, invoices, salesInvoices, bills, orders, deliveries, quotes, company, parties] = await Promise.all([
     assessBooks(),
@@ -154,32 +159,33 @@ export default async function HomePage({
   });
   return (
     <>
-      <h1>Today at SPER</h1>
-      <p className="lede">{formatDate(new Date())}. Do the red and amber items first. The numbers below come from the same records as the reports.</p>
+      <h1>{user.role === "PARTNER" ? "Office desk" : "Today at SPER"}</h1>
+      <p className="lede">{user.role === "PARTNER" ? "Invoices, payments, the bank, taxes, and payroll." : "Quotes, customers, and formulas."} {formatDate(new Date())}.</p>
       <Flash error={query.error} notice={query.notice} />
       {!books.check.ok && (
         <div className="banner bad">Stop. {books.check.problems[0]}</div>
       )}
       <div className="cards">
-        <Link className="card" href="/reports/sales"><span>Sales this month</span><strong>{usd(dash.mtd.salesCents)}</strong><p className="muted">{dash.mtd.versus.words}</p></Link>
-        <Link className="card" href="/reports/sales"><span>Sales this year</span><strong>{usd(dash.ytd.salesCents)}</strong><p className="muted">{dash.ytd.versus.words}</p></Link>
-        <Link className="card" href="/reports/margins"><span>Gross margin</span><strong>{dash.marginPercent == null ? "—" : `${dash.marginPercent}%`}</strong><p className="muted">Sales minus the full cost on those invoices.</p></Link>
-        {dash.channels.map((channel) => (
+        {roleMayOpen(user.role, "/reports/sales") && <Link className="card" href="/reports/sales"><span>Sales this month</span><strong>{usd(dash.mtd.salesCents)}</strong><p className="muted">{dash.mtd.versus.words}</p></Link>}
+        {roleMayOpen(user.role, "/reports/sales") && <Link className="card" href="/reports/sales"><span>Sales this year</span><strong>{usd(dash.ytd.salesCents)}</strong><p className="muted">{dash.ytd.versus.words}</p></Link>}
+        {roleMayOpen(user.role, "/reports/margins") && <Link className="card" href="/reports/margins"><span>Gross margin</span><strong>{dash.marginPercent == null ? "—" : `${dash.marginPercent}%`}</strong><p className="muted">Sales minus the full cost on those invoices.</p></Link>}
+        {dash.channels.filter((channel) => roleMayOpen(user.role, "/reports/sales")).map((channel) => (
           <Link key={channel.code} className="card" href={`/reports/sales?channel=${channel.code}`}>
             <span>{channel.code} — {channel.label}</span>
             <strong>{usd(channel.salesCents)}</strong>
             <p className="muted">{channel.marginPercent == null ? "No sales" : `${channel.marginPercent}% margin`}</p>
           </Link>
         ))}
-        <Link className="card" href="/sales"><span>Open quotes</span><strong>{dash.quoteCount}</strong><p className="muted">Pipeline {usd(dash.pipelineCents)}</p></Link>
-        <Link className="card" href="/reports/ar"><span>Overdue from customers</span><strong>{usd(dash.overdueCents)}</strong><p className="muted">They owe {usd(dash.receivableCents)} in total.</p></Link>
-        <Link className="card" href="/reports/ap"><span>Bills due in 14 days</span><strong>{usd(dash.payablesSoonCents)}</strong><p className="muted">{dash.payablesSoonCount} bill{dash.payablesSoonCount === 1 ? "" : "s"}, including any already late.</p></Link>
-        <Link className="card" href="/money"><span>Cash in the bank</span><strong>{usd(dash.cashCents)}</strong></Link>
-        <Link className="card" href="/money/reconcile"><span>Unreconciled bank lines</span><strong>{dash.unreconciled}</strong></Link>
-        <Link className="card" href="/inventory"><span>Inventory</span><strong>{usd(dash.inventoryCents)}</strong><p className="muted">{dash.belowReorder} below the reorder point.</p></Link>
-        <Link className="card" href="/planning/coverage"><span>Low coverage</span><strong>{dash.criticalCoverage} critical, {dash.lowCoverage} low</strong><p className="muted">Days of cover from the materials plan.</p></Link>
-        <Link className="card" href="/sales"><span>Waiting to ship</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>
-        <Link className="card" href="/tax"><span>Next tax date</span><strong>{dash.taxDeadlines[0] ? formatDate(dash.taxDeadlines[0].date) : "None"}</strong><p className="muted">{dash.taxDeadlines[0]?.name}</p></Link>
+        {roleMayOpen(user.role, "/sales") && <Link className="card" href="/sales"><span>Open quotes</span><strong>{dash.quoteCount}</strong><p className="muted">Pipeline {usd(dash.pipelineCents)}</p></Link>}
+        {roleMayOpen(user.role, "/reports/ar") && <Link className="card" href="/reports/ar"><span>Overdue from customers</span><strong>{usd(dash.overdueCents)}</strong><p className="muted">They owe {usd(dash.receivableCents)} in total.</p></Link>}
+        {roleMayOpen(user.role, "/reports/ap") && <Link className="card" href="/reports/ap"><span>Bills due in 14 days</span><strong>{usd(dash.payablesSoonCents)}</strong><p className="muted">{dash.payablesSoonCount} bill{dash.payablesSoonCount === 1 ? "" : "s"}, including any already late.</p></Link>}
+        {roleMayOpen(user.role, "/money") && <Link className="card" href="/money"><span>Cash in the bank</span><strong>{usd(dash.cashCents)}</strong></Link>}
+        {roleMayOpen(user.role, "/money/reconcile") && <Link className="card" href="/money/reconcile"><span>Unreconciled bank lines</span><strong>{dash.unreconciled}</strong></Link>}
+        {roleMayOpen(user.role, "/inventory") && <Link className="card" href="/inventory"><span>Inventory</span><strong>{usd(dash.inventoryCents)}</strong><p className="muted">{dash.belowReorder} below the reorder point.</p></Link>}
+        {roleMayOpen(user.role, "/planning/coverage") && <Link className="card" href="/planning/coverage"><span>Low coverage</span><strong>{dash.criticalCoverage} critical, {dash.lowCoverage} low</strong><p className="muted">Days of cover from the materials plan.</p></Link>}
+        {roleMayOpen(user.role, "/sales") && <Link className="card" href="/sales"><span>Waiting to ship</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>}
+        {roleMayOpen(user.role, "/tax") && <Link className="card" href="/tax"><span>Next tax date</span><strong>{dash.taxDeadlines[0] ? formatDate(dash.taxDeadlines[0].date) : "None"}</strong><p className="muted">{dash.taxDeadlines[0]?.name}</p></Link>}
+        {roleMayOpen(user.role, "/payroll") && <Link className="card" href="/payroll"><span>Payroll</span><strong>{employeeCount} {employeeCount === 1 ? "person" : "people"}</strong><p className="muted">Florida. No state income tax. The accountant reviews the tax table.</p></Link>}
       </div>
       <h2>Top products this year</h2>
       <div className="wrap"><table>
@@ -204,7 +210,7 @@ export default async function HomePage({
       <h2>What needs attention</h2>
       {attention.length === 0 ? <p>Nothing is waiting on you today.</p> : (
         <div className="attention">
-          {attention.map((item) => (
+          {attention.filter((item) => roleMayOpen(user.role, item.href)).map((item) => (
             <Link key={item.title} href={item.href}>
               <article className={`card ${item.tone}`}>
                 <strong>{item.title}</strong>
@@ -216,14 +222,45 @@ export default async function HomePage({
       )}
       <h2>Start something</h2>
       <div className="row">
-        <Link className="btn" href="/sales/quotes/new">New quote</Link>
-        <Link className="btn" href="/purchasing/orders/new">New purchase order</Link>
-        <Link className="btn secondary" href="/production/new">Plan a batch</Link>
-        <Link className="btn secondary" href="/money/reconcile">Check the bank</Link>
-        <Link className="btn secondary" href="/inventory">Print a label</Link>
+        {roleMayOpen(user.role, "/sales") && <Link className="btn" href="/sales/quotes/new">New quote</Link>}
+        {user.role === "PARTNER" && <Link className="btn" href="/payroll">Run payroll</Link>}
+        {user.role === "PARTNER" && <Link className="btn secondary" href="/money/reconcile">Check the bank</Link>}
+        {user.role === "OWNER" && <Link className="btn secondary" href="/products">Open a formula</Link>}
       </div>
       <p className="muted">Sales are product sales before tax. Gross margin uses the cost recorded on those same invoices, including the recipe and packaging in that cost. Month and year are compared with the same dates last month and last year.</p>
-      <p className="muted">{formatQty(stock.reduce((sum, lot) => sum + lotQty(lot), 0))} on hand across all lots, including lots waiting for quality.</p>
+      {user.role === "OWNER" && <p className="muted">{formatQty(stock.reduce((sum, lot) => sum + lotQty(lot), 0))} on hand across all lots, including lots waiting for quality.</p>}
+    </>
+  );
+}
+
+async function TrevorHome({ error, notice }: { error?: string; notice?: string }) {
+  const [orders, batches, quarantine] = await Promise.all([
+    prisma.salesOrder.findMany({ where: { status: { in: ["CONFIRMED", "PARTLY_SHIPPED"] } }, include: { party: true }, take: 8 }),
+    prisma.productionBatch.findMany({ where: { status: { in: ["PLANNED", "IN_PROCESS"] } }, include: { product: true }, take: 8 }),
+    prisma.lot.findMany({ where: { qcStatus: "QUARANTINE" }, include: { product: true }, take: 8 }),
+  ]);
+  return (
+    <>
+      <h1>Trevor's list</h1>
+      <p className="lede">Make it, pack it, label it, and count it. The office handles invoices and the bank.</p>
+      <Flash error={error} notice={notice} />
+      <div className="row">
+        <Link className="btn" href="/planning/schedule">What to make</Link>
+        <Link className="btn" href="/production">Batches</Link>
+        <Link className="btn secondary" href="/inventory">Inventory and labels</Link>
+      </div>
+      <h2>Orders to pack</h2>
+      {orders.length === 0 ? <p>Nothing is waiting to pack.</p> : (
+        <ul>{orders.map((order) => <li key={order.id}><Link href={`/sales/orders/${order.id}`}>{order.number}</Link> · {order.party.name}</li>)}</ul>
+      )}
+      <h2>Batches</h2>
+      {batches.length === 0 ? <p>No batch is open.</p> : (
+        <ul>{batches.map((batch) => <li key={batch.id}><Link href={`/production/${batch.id}`}>{batch.number}</Link> · {batch.product.name}</li>)}</ul>
+      )}
+      <h2>Waiting for a count or release</h2>
+      {quarantine.length === 0 ? <p>No lot is in quarantine.</p> : (
+        <ul>{quarantine.map((lot) => <li key={lot.id}><Link href={`/inventory/${lot.id}`}>{lot.lotNumber}</Link> · {lot.product.name}</li>)}</ul>
+      )}
     </>
   );
 }
