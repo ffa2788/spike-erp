@@ -47,6 +47,14 @@ curl -H "Authorization: Bearer spike_..." \
 
 The JSON lists orders, invoices, gross sales, fees, refunds, reimbursements, the expected payout, the bank deposit, and any difference: missing order, duplicate, unmapped SKU, fee mismatch, or a payout that does not match the deposit.
 
+## FBA inventory
+
+Shipping a pallet to Amazon is not a sale. SPIKE moves the units from the Clearwater warehouse to the Amazon FBA location at the same cost, plus inbound freight spread by units or by weight. That landed cost is the cost of each unit Amazon sells.
+
+When the All Orders report shows an FBA sale and those units are already at Amazon, the A- invoice debits Due from Amazon (account 1150), credits sales, and relieves that landed cost from the FBA location. Referral and FBA fees debit Amazon fees and credit Due from Amazon. The settlement deposit debits cash and clears Due from Amazon.
+
+A sellable return puts the unit back at FBA and reverses the cost. An unsellable return, a removal, or a disposal does not. A reimbursement Amazon pays for a lost unit is other income. Storage fees are Amazon fees. Each month, compare the FBA inventory report with the Amazon FBA location. The difference is an inventory adjustment, and the variance list says which SKU.
+
 ## Selling Partner API
 
 Left in the code and switched off (`AMAZON_SP_API_ENABLED` is false). Do not register a developer app for this. If that changes later, the environment names are `AMAZON_LWA_CLIENT_ID`, `AMAZON_LWA_CLIENT_SECRET`, `AMAZON_REFRESH_TOKEN`, `AMAZON_SELLER_ID`, `AMAZON_MARKETPLACE_ID`, `AMAZON_AWS_ACCESS_KEY_ID`, and `AMAZON_AWS_SECRET_ACCESS_KEY`. None of those belong in the repo.

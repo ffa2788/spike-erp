@@ -963,6 +963,31 @@ model FixedAsset {
   isExample           Boolean  @default(false)
 }
 
+model FbaShipment {
+  id           String   @id @default(cuid())
+  shipmentId   String   @unique
+  shippedOn    DateTime
+  freightCents Int      @default(0)
+  spreadBy     String   @default("UNITS")
+  status       String   @default("IN_TRANSIT")
+  journalId    String?
+  lines        FbaShipmentLine[]
+}
+
+model FbaShipmentLine {
+  id             String      @id @default(cuid())
+  shipmentId     String
+  shipment       FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  productId      String
+  sourceLotId    String
+  fbaLotId       String
+  qtyShipped     Decimal     @db.Decimal(18, 4)
+  qtyReceived    Decimal     @default(0) @db.Decimal(18, 4)
+  weightLb       Decimal     @default(0) @db.Decimal(18, 4)
+  landedUnitCost Decimal     @db.Decimal(18, 6)
+  claimQty       Decimal     @default(0) @db.Decimal(18, 4)
+}
+
 model FbaBalance {
   productId      String   @id
   fulfillable    Decimal  @default(0) @db.Decimal(18, 4)
