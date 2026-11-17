@@ -869,7 +869,7 @@ export async function postAmazonHistoryInvoice(
     lines: { productId: string; description: string; qty: number; netCents: number }[];
     fulfillment?: "FBA" | "FBM";
   },
-): Promise<Result<{ invoiceId: string; number: string }>> {
+): Promise<Result<{ invoiceId: string; number: string; created: boolean }>> {
   const denied = deny(actor, "importData");
   if (denied) return denied;
   if (input.lines.length === 0) return err("This Amazon order has no lines to invoice.");
@@ -877,7 +877,7 @@ export async function postAmazonHistoryInvoice(
     const existing = await tx.invoice.findFirst({
       where: { channel: "AMAZON", marketplaceOrderId: input.orderId, status: { not: "VOID" } },
     });
-    if (existing) return ok({ invoiceId: existing.id, number: existing.number });
+    if (existing) return ok({ invoiceId: existing.id, number: existing.number, created: false });
     const priced = input.lines.map((line) => {
       const unitPriceCents = line.qty > 0 ? Math.round(line.netCents / line.qty) : line.netCents;
       return { ...line, unitPriceCents, extended: unitPriceCents * line.qty };
@@ -921,7 +921,7 @@ export async function postAmazonHistoryInvoice(
     });
     if (!journal.ok) return journal;
     await tx.invoice.update({ where: { id: invoice.id }, data: { salesJournalId: journal.value } });
-    return ok({ invoiceId: invoice.id, number: invoice.number });
+    return ok({ invoiceId: invoice.id, number: invoice.number, created: true });
   });
 }
 

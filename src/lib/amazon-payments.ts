@@ -108,6 +108,89 @@ export function paymentDay(value: string): string {
   return parseLooseDate(trimmed) ?? "";
 }
 
+export function readAmazonMoneyFile(text: string): { rows: PaymentRow[]; error: string | null; kind: "payments" | "settlement" } {
+  const sample = text.replace(/^\uFEFF/, "").slice(0, 800).toLowerCase();
+  if (sample.includes("amount-type") || sample.includes("settlement-id\t")) {
+    const parsed = parseSettlementFlatFile(text);
+    return { ...parsed, kind: "settlement" };
+  }
+  const parsed = parsePaymentsReport(text);
+  return { ...parsed, kind: "payments" };
+}
+
+/** Amazon's settlement flat file v2: one amount per row, tab-separated. */
+export function parseSettlementFlatFile(text: string): { rows: PaymentRow[]; error: string | null } {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return { rows: [], error: "The settlement file needs a header and at least one amount." };
+  const headers = lines[0].split("\t").map((cell) => cell.trim().toLowerCase());
+  const atIndex = (name: string) => headers.indexOf(name);
+  if (atIndex("settlement-id") < 0 || atIndex("amount-type") < 0) {
+    return { rows: [], error: "The settlement file needs settlement-id and amount-type columns." };
+  }
+  const cell = (row: string[], name: string) => {
+    const index = atIndex(name);
+    return index >= 0 ? (row[index] ?? "").trim() : "";
+  };
+  const groups = new Map<string, PaymentRow>();
+  for (const line of lines.slice(1)) {
+    const cols = line.split("\t");
+    const settlementId = cell(cols, "settlement-id");
+    const transaction = cell(cols, "transaction-type");
+    const orderId = cell(cols, "order-id");
+    const sku = cell(cols, "sku");
+    const amountType = cell(cols, "amount-type").toLowerCase();
+    const amountDesc = cell(cols, "amount-description");
+    const amount = parseAmazonMoney(cell(cols, "amount"));
+    const posted = cell(cols, "posted-date-time") || cell(cols, "posted-date") || cell(cols, "deposit-date");
+    const qty = Number(cell(cols, "quantity-purchased").replace(/,/g, "")) || 0;
+    const fulfillmentId = cell(cols, "fulfillment-id");
+    const fulfillment = fulfillmentId === "AFN" ? "Amazon" : fulfillmentId === "MFN" ? "Merchant" : fulfillmentId;
+    if (!settlementId && !transaction && amount === 0) continue;
+    const type = settlementType(transaction, amountType);
+    const key = [settlementId, type, orderId, sku, cell(cols, "order-item-code"), posted.slice(0, 19)].join("|");
+    const current = groups.get(key) ?? {
+      dateTime: posted,
+      day: /^\d{4}-\d{2}-\d{2}/.test(posted) ? posted.slice(0, 10) : paymentDay(posted),
+      settlementId,
+      type,
+      orderId,
+      sku,
+      description: amountDesc || transaction,
+      qty,
+      fulfillment,
+      channel: channelOf(fulfillment),
+      productSalesCents: 0,
+      sellingFeeCents: 0,
+      fbaFeeCents: 0,
+      otherTransactionFeeCents: 0,
+      otherCents: 0,
+      promotionalRebatesCents: 0,
+      totalCents: 0,
+    };
+    if (qty > current.qty) current.qty = qty;
+    const desc = `${amountType} ${amountDesc}`.toLowerCase();
+    if (type === "Transfer") current.totalCents += amount;
+    else if (desc.includes("principal") || (amountType.includes("price") && !desc.includes("tax"))) current.productSalesCents += amount;
+    else if (desc.includes("fba")) current.fbaFeeCents += amount;
+    else if (amountType.includes("fee") || desc.includes("commission")) current.sellingFeeCents += amount;
+    else if (amountType.includes("promotion")) current.promotionalRebatesCents += amount;
+    else current.otherCents += amount;
+    if (type !== "Transfer") current.totalCents += amount;
+    groups.set(key, current);
+  }
+  return { rows: [...groups.values()], error: null };
+}
+
+function settlementType(transaction: string, amountType: string): string {
+  const text = `${transaction} ${amountType}`.toLowerCase();
+  if (text.includes("transfer") || text.includes("deposit")) return "Transfer";
+  if (text.includes("refund") || text.includes("chargeback")) return text.includes("chargeback") ? "Chargeback Refund" : "Refund";
+  if (text.includes("reimburse") || text.includes("adjustment")) return "Adjustment";
+  if (text.includes("service")) return "Service Fee";
+  if (text.includes("storage") || text.includes("inventory fee")) return "FBA Inventory Fee";
+  return "Order";
+}
+
 export function parsePaymentsReport(text: string): { rows: PaymentRow[]; error: string | null } {
   const table = csvTable(text);
   const headerIndex = table.findIndex((row) => (row[0] ?? "").trim().toLowerCase().startsWith("date/time"));

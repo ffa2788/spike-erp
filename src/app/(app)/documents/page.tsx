@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Flash, readQuery } from "@/components/ui";
+import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { generateDocAction } from "@/server/extra-actions";
+import DocumentPage from "./[id]/page";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,9 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const query = await readQuery(searchParams);
+  const sp = await searchParams;
+  const query = await readQuery(Promise.resolve(sp));
+  const id = one(sp, "id");
   const q = query.q.toLowerCase();
   const [docs, products] = await Promise.all([
     prisma.safetyDocument.findMany({ include: { product: true }, orderBy: { revisionOn: "desc" } }),
@@ -19,9 +23,11 @@ export default async function DocumentsPage({
   ]);
   const rows = docs.filter((doc) => !q || `${doc.title} ${doc.product.name} ${doc.number}`.toLowerCase().includes(q));
   return (
-    <>
-      <h1>TDS and SDS library</h1>
-      <p className="lede">A new sheet is a draft. It is not released until a qualified person reviews it and you publish it.</p>
+    <Screen
+      title="Documents"
+      lede="Technical data sheets, safety data sheets, and certificates. A new sheet stays a draft until someone qualified publishes it."
+      drawer={id ? <><DrawerClose href="/documents" /><DocumentPage params={Promise.resolve({ id })} searchParams={Promise.resolve(sp)} /></> : undefined}
+    >
       <Flash error={query.error} notice={query.notice} />
       <form>
         <label className="field">Search<input name="q" defaultValue={query.q} /></label>
@@ -29,30 +35,27 @@ export default async function DocumentsPage({
       </form>
       <form action={generateDocAction} className="grid-2">
         <label className="field">Product
-          <select name="productId" required>
-            {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
-          </select>
+          <select name="productId">{products.map((product) => <option key={product.id} value={product.id}>{product.sku} {product.name}</option>)}</select>
         </label>
         <label className="field">Kind
-          <select name="kind"><option value="TDS">Technical data sheet</option><option value="SDS">Safety data sheet</option></select>
+          <select name="kind"><option value="SDS">SDS</option><option value="TDS">TDS</option></select>
         </label>
         <button className="btn" type="submit">Create a draft</button>
       </form>
       <div className="wrap"><table>
-        <thead><tr><th>Number</th><th>Product</th><th>Kind</th><th>Version</th><th>Status</th><th>Date</th></tr></thead>
+        <thead><tr><th>Number</th><th>Title</th><th>Product</th><th>Status</th><th>Revised</th></tr></thead>
         <tbody>
           {rows.map((doc) => (
             <tr key={doc.id}>
-              <td><Link href={`/documents/${doc.id}`}>{doc.number}</Link></td>
+              <td><Link href={`/documents?id=${doc.id}`}>{doc.number}</Link></td>
+              <td>{doc.title}</td>
               <td>{doc.product.name}</td>
-              <td>{doc.kind}</td>
-              <td>{doc.version}</td>
-              <td>{doc.status === "DRAFT" ? "Draft — needs review" : doc.status === "REVIEWED" ? "Reviewed" : "Published"}</td>
+              <td><span className={`chip ${doc.status === "PUBLISHED" ? "good" : "warn"}`}>{doc.status}</span></td>
               <td>{formatDate(doc.revisionOn)}</td>
             </tr>
           ))}
         </tbody>
       </table></div>
-    </>
+    </Screen>
   );
 }

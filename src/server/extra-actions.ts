@@ -17,7 +17,7 @@ function text(formData: FormData, key: string) {
 export async function savePoundsFormula(formData: FormData) {
   const actor = await requireCan("editMasters");
   const productId = text(formData, "productId");
-  const back = `/products/${productId}/formula`;
+  const back = `/products?formula=1&id=${productId}`;
   const ids = formData.getAll("ingredientId").map(String);
   const pounds = formData.getAll("pounds").map(String);
   const lines = [];

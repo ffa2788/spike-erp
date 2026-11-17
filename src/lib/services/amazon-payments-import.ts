@@ -9,6 +9,7 @@ import {
   feeRowJournal,
   netMarginCents,
   parsePaymentsReport,
+  readAmazonMoneyFile,
   paymentFingerprint,
   refundJournal,
   rollupPaymentFees,
@@ -30,13 +31,16 @@ export type PaymentsImportSummary = {
   unsettledOrders: string[];
   transfers: number;
   transferCents: number;
+  refunds: number;
+  feeCents: number;
+  reimbursements: number;
 };
 
 const FEE_TYPES = new Set(["shipping services", "service fee", "fba inventory fee", "fba transaction fees", "adjustment"]);
 const REFUND_TYPES = new Set(["refund", "chargeback refund"]);
 
 export async function importPaymentsFile(actor: Actor, text: string): Promise<Result<PaymentsImportSummary>> {
-  const parsed = parsePaymentsReport(text);
+  const parsed = readAmazonMoneyFile(text);
   if (parsed.error) return err(parsed.error);
   const file = dedupePayments(parsed.rows);
   return run(async (tx) => {
@@ -106,11 +110,17 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
     }
     let transfers = 0;
     let transferCents = 0;
+    let refunds = 0;
+    let feeCents = 0;
+    let reimbursements = 0;
     for (const row of fresh) {
       const type = row.type.trim().toLowerCase();
       if (type === "order" || type === "transfer") continue;
       const journalLines = REFUND_TYPES.has(type) ? refundJournal(row) : FEE_TYPES.has(type) ? feeRowJournal(row.totalCents || rowEffect(row)) : null;
       if (!journalLines) continue;
+      if (REFUND_TYPES.has(type)) refunds += 1;
+      else if (type === "adjustment" && (row.totalCents || rowEffect(row)) > 0) reimbursements += 1;
+      else feeCents += Math.abs(row.totalCents || rowEffect(row));
       const problem = journalProblem(journalLines);
       if (problem) return err(problem);
       const journal = await postJournal(tx, actor, {
@@ -153,6 +163,9 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
       unsettledOrders,
       transfers,
       transferCents,
+      refunds,
+      feeCents,
+      reimbursements,
     });
   });
 }

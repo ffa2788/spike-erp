@@ -1,34 +1,91 @@
-import Link from "next/link";
 import { Flash, readQuery } from "@/components/ui";
+import { Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { saveTrevorEmail } from "@/server/planning-actions";
+import UsersPage from "./users/page";
+import TaxRatesPage from "./tax/page";
+import NsfPage from "./nsf/page";
+import AuditPage from "./audit/page";
+import GuidePage from "./guide/page";
+import ImportPage from "../import/page";
+import { createApiKey, revokeApiKey } from "@/server/api-key-actions";
 
 export const dynamic = "force-dynamic";
+
+const TABS = [
+  ["company", "Company"],
+  ["users", "Users"],
+  ["tax", "Tax rates"],
+  ["nsf", "NSF"],
+  ["import", "Import"],
+  ["integrations", "Integrations"],
+  ["audit", "Audit"],
+  ["guide", "Guide"],
+] as const;
 
 export default async function SettingsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const query = await readQuery(searchParams);
-  const company = await prisma.companyProfile.findUnique({ where: { id: "company" } });
+  const sp = await searchParams;
+  const query = await readQuery(Promise.resolve(sp));
+  const again = Promise.resolve(sp);
+  const tab = TABS.some(([id]) => id === one(sp, "tab")) ? one(sp, "tab") : "company";
+  const [company, keys] = await Promise.all([
+    prisma.companyProfile.findUnique({ where: { id: "company" } }),
+    prisma.apiKey.findMany({ orderBy: { createdAt: "desc" } }),
+  ]);
   return (
-    <>
-      <h1>Settings</h1>
-      <p className="lede">{company?.legalName}, {company?.city}, {company?.state}</p>
-      <Flash error={query.error} notice={query.notice} />
-      <h2>Trevor's email</h2>
-      <p>Trevor has no login. Release to Trevor sends this address a PDF of the work list and a short table in the message.</p>
-      <form action={saveTrevorEmail} className="row">
-        <label className="field">Email<input name="trevorEmail" type="email" defaultValue={company?.trevorEmail ?? ""} placeholder="trevor@sper.example" /></label>
-        <button className="btn" type="submit">Save Trevor's email</button>
-      </form>
-      <div className="attention">
-        <Link href="/settings/guide"><article className="card"><strong>How the work flows</strong><span>Plain steps for quotes, purchasing, batches, and the bank.</span></article></Link>
-        <Link href="/settings/users"><article className="card"><strong>People and roles</strong><span>FFA and Chris. Both see everything.</span></article></Link>
-        <Link href="/settings/audit"><article className="card"><strong>Change history</strong><span>Who changed what.</span></article></Link>
-        <Link href="/settings/tax"><article className="card"><strong>Sales tax rates</strong><span>State and local rates, in percent.</span></article></Link>
-      </div>
-    </>
+    <Screen
+      title="Settings"
+      lede={`${company?.legalName ?? "SPER"}, ${company?.city ?? ""} ${company?.state ?? ""}. Trevor has no login. His email is stored here.`}
+      active={tab}
+      tabs={TABS.map(([tabId, label]) => ({ id: tabId, label, href: `/settings?tab=${tabId}` }))}
+    >
+      {tab === "company" && (
+        <>
+          <Flash error={query.error} notice={query.notice} />
+          <h2>Trevor's email</h2>
+          <p>Release to Trevor sends this address the production plan PDF and a short HTML table.</p>
+          <form action={saveTrevorEmail} className="row">
+            <label className="field">Email<input name="trevorEmail" type="email" defaultValue={company?.trevorEmail ?? ""} placeholder="trevor@sper.example" /></label>
+            <button className="btn" type="submit">Save Trevor's email</button>
+          </form>
+        </>
+      )}
+      {tab === "users" && <UsersPage searchParams={again} />}
+      {tab === "tax" && <TaxRatesPage searchParams={again} />}
+      {tab === "nsf" && <NsfPage searchParams={again} />}
+      {tab === "import" && <ImportPage />}
+      {tab === "integrations" && (
+        <>
+          <Flash error={query.error} notice={query.notice} />
+          <h2>SPIKE bot key</h2>
+          <p>The bot uses this key to post Amazon reports and to read the reconciliation. Copy the key from the notice. It is stored only as a hash.</p>
+          <form action={createApiKey}>
+            <label className="field">Name<input name="name" defaultValue="SPIKE bot" /></label>
+            <input type="hidden" name="read" value="yes" />
+            <input type="hidden" name="sales" value="yes" />
+            <input type="hidden" name="purchasing" value="yes" />
+            <input type="hidden" name="planning" value="yes" />
+            <input type="hidden" name="money" value="yes" />
+            <button className="btn" type="submit">Create a key</button>
+          </form>
+          <ul>
+            {keys.map((key) => (
+              <li key={key.id}>
+                {key.name} · {key.prefix}… · {key.revokedAt ? "revoked" : key.scopes}
+                {!key.revokedAt && (
+                  <form action={revokeApiKey}><input type="hidden" name="id" value={key.id} /><button className="btn secondary" type="submit">Revoke</button></form>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {tab === "audit" && <AuditPage />}
+      {tab === "guide" && <GuidePage />}
+    </Screen>
   );
 }

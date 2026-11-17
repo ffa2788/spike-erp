@@ -1,6 +1,6 @@
 "use server";
 
-import { usd } from "@/lib/format";
+import { amazonSummarySentence } from "@/lib/services/amazon-report-import";
 import { importAllOrdersFile, importFbaFile, saveAmazonSkuMap } from "@/lib/services/amazon-import";
 import { importPaymentsFile } from "@/lib/services/amazon-payments-import";
 import { requireCan } from "./actor";
@@ -22,7 +22,7 @@ export async function importOrdersAction(formData: FormData) {
   const summary = result.value;
   succeed(
     "/sales/amazon/import",
-    `Orders: read ${summary.rowsRead}, new ${summary.created}, updated ${summary.updated}, cancelled skipped ${summary.cancelled}, unmapped ${summary.unmapped.length}. Invoices ${summary.invoices.join(", ") || "none"}.`,
+    amazonSummarySentence({ invoices: summary.invoices.length, refunds: 0, feeCents: 0, depositCents: 0, unmapped: summary.unmapped.length }) + ` Read ${summary.rowsRead}.`,
   );
 }
 
@@ -47,8 +47,18 @@ export async function importPaymentsAction(formData: FormData) {
   const summary = result.value;
   succeed(
     "/sales/amazon/import",
-    `Payments: read ${summary.rowsRead}, new ${summary.created}, duplicates ${summary.duplicates}. Settled ${summary.settled.join(", ") || "no invoices"}. ${summary.unsettledOrders.length ? `No A- invoice for ${summary.unsettledOrders.join(", ")}. ` : ""}Payouts ${summary.transfers} totaling ${usd(summary.transferCents)}.`,
+    amazonSummarySentence({ invoices: summary.settled.length, refunds: summary.refunds, feeCents: summary.feeCents, depositCents: summary.transferCents, unmapped: summary.unsettledOrders.length }),
   );
+}
+
+export async function importSettlementAction(formData: FormData) {
+  const actor = await requireCan("importData");
+  const text = await fileText(formData);
+  if (!text.trim()) fail("/sales/amazon/import", "Choose the settlement flat file.");
+  const result = await importPaymentsFile(actor, text);
+  if (!result.ok) fail("/sales/amazon/import", result.error);
+  const summary = result.value;
+  succeed("/sales/amazon/import", amazonSummarySentence({ invoices: summary.settled.length, refunds: summary.refunds, feeCents: summary.feeCents, depositCents: summary.transferCents, unmapped: summary.unsettledOrders.length }));
 }
 
 export async function mapAmazonSkuAction(formData: FormData) {

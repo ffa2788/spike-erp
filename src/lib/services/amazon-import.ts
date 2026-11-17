@@ -109,7 +109,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
       lines: bucket.lines.map(({ itemKey: _item, ...line }) => line),
     });
     if (!posted.ok) return err(posted.error);
-    invoices.push(posted.value.number);
+    if (posted.value.created) invoices.push(posted.value.number);
     await prisma.amazonOrderItem.updateMany({
       where: { id: { in: bucket.lines.map((line) => line.itemKey) } },
       data: { invoiceId: posted.value.invoiceId },

@@ -3,7 +3,7 @@ import { journalProblem } from "@/lib/journals";
 import { calculatePay, postingBlock, payrollJournal, quarterlyPayroll, type PayrollTable } from "@/lib/payroll";
 import { pathShowsFormula, pathSteps } from "@/lib/product-path";
 import { DEMO_USERS } from "@/lib/demo-auth";
-import { SHARED_NAV } from "@/lib/roles";
+import { FEATURE_TABS, SHARED_NAV } from "@/lib/roles";
 import { buildPlan, parsePulls, planEmailHtml, planPlainText, wholeUnits } from "@/lib/work-list-mail";
 import { channelPrefix } from "@/lib/commercial";
 
@@ -21,9 +21,10 @@ const table: PayrollTable = {
 describe("roles, product paths, export, and payroll", () => {
   it("gives FFA and Chris one menu, and Trevor no login", () => {
     const hrefs = SHARED_NAV.flatMap((group) => group.links.map((link) => link.href));
-    expect(hrefs).toContain("/payroll");
-    expect(hrefs).toContain("/production");
-    expect(hrefs).toContain("/tax");
+    expect(hrefs).toEqual(["/", "/sales", "/products", "/inventory", "/purchasing", "/money", "/documents", "/settings"]);
+    expect(FEATURE_TABS.payroll).toBe("/money?tab=payroll");
+    expect(FEATURE_TABS.production).toBe("/inventory?tab=production");
+    expect(FEATURE_TABS.tax).toBe("/money?tab=tax");
     expect(DEMO_USERS.map((user) => user.name)).toEqual(["FFA", "Chris"]);
   });
 

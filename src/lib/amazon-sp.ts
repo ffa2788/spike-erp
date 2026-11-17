@@ -1,5 +1,15 @@
 import { createHash, createHmac } from "crypto";
 
+/** Seller Central reports are the path. This connector stays off until the owner turns it on. */
+export const AMAZON_SP_API_ENABLED = false;
+
+export function spApiStatus(): { enabled: false; reason: string } {
+  return {
+    enabled: false,
+    reason: "The Selling Partner API is not used. SPIKE posts Amazon sales from the All Orders report, the payments date range file, and the settlement flat file.",
+  };
+}
+
 export const AMAZON_ENV_KEYS = [
   "AMAZON_LWA_CLIENT_ID",
   "AMAZON_LWA_CLIENT_SECRET",

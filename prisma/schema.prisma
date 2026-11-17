@@ -230,6 +230,32 @@ model CompanyProfile {
   trevorEmail       String     @default("")
 }
 
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  prefix     String
+  hash       String    @unique
+  scopes     String
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+}
+
+model OutboundDraft {
+  id             String   @id @default(cuid())
+  kind           String
+  entityId       String
+  toAddress      String
+  subject        String
+  body           String
+  html           String   @default("")
+  attachmentName String
+  pdf            Bytes
+  status         String   @default("DRAFT")
+  detail         String   @default("")
+  createdAt      DateTime @default(now())
+}
+
 model Party {
   id               String    @id @default(cuid())
   code             String    @unique
