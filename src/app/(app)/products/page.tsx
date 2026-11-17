@@ -5,9 +5,9 @@ import { rollUpCost } from "@/lib/costing";
 import { prisma } from "@/lib/db";
 import { usdPrecise } from "@/lib/format";
 import { KIND_LABEL } from "@/lib/labels";
-import ProductPage from "./[id]/page";
-import NewProductPage from "./new/page";
-import FormulaPage from "./[id]/formula/page";
+import { ProductPage } from "./[id]/view";
+import { NewProductPage } from "./new/view";
+import { FormulaBuilderPage as FormulaPage } from "./[id]/formula/view";
 
 export const dynamic = "force-dynamic";
 

@@ -4,13 +4,13 @@ import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { formatDate, usd } from "@/lib/format";
 import { INVOICE_LABEL, PO_LABEL } from "@/lib/labels";
-import VendorsPage from "../vendors/page";
-import VendorPage from "../vendors/[id]/page";
-import NewVendorPage from "../vendors/new/page";
-import PoPage from "./orders/[id]/page";
-import NewPoPage from "./orders/new/page";
-import ReceiptPage from "./receipts/[id]/page";
-import BillPage from "./bills/[id]/page";
+import { VendorsPage } from "../vendors/view";
+import { VendorPage } from "../vendors/[id]/view";
+import { NewVendorPage } from "../vendors/new/view";
+import { PoPage } from "./orders/[id]/view";
+import { NewPoPage } from "./orders/new/view";
+import { ReceiptPage } from "./receipts/[id]/view";
+import { BillPage } from "./bills/[id]/view";
 
 export const dynamic = "force-dynamic";
 

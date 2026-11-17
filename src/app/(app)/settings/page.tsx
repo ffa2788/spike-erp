@@ -2,12 +2,12 @@ import { Flash, readQuery } from "@/components/ui";
 import { Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { saveTrevorEmail } from "@/server/planning-actions";
-import UsersPage from "./users/page";
-import TaxRatesPage from "./tax/page";
-import NsfPage from "./nsf/page";
-import AuditPage from "./audit/page";
-import GuidePage from "./guide/page";
-import ImportPage from "../import/page";
+import { UsersPage } from "./users/view";
+import { TaxPage as TaxRatesPage } from "./tax/view";
+import { NsfPage } from "./nsf/view";
+import { AuditPage } from "./audit/view";
+import { GuidePage } from "./guide/view";
+import { ImportPage } from "../import/view";
 import { createApiKey, revokeApiKey } from "@/server/api-key-actions";
 
 export const dynamic = "force-dynamic";

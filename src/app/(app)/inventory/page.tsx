@@ -7,13 +7,13 @@ import { formatQty, usd } from "@/lib/format";
 import { lotQty, stockBuckets, valueCents } from "@/lib/inventory";
 import { currentStock } from "@/lib/read-models";
 import { QC_LABEL } from "@/lib/labels";
-import LotPage from "./[id]/page";
-import CoveragePage from "../planning/coverage/page";
-import PlanningPage from "../planning/page";
-import SchedulePage from "../planning/schedule/page";
-import ProductionPage from "../production/page";
-import NewBatchPage from "../production/new/page";
-import BatchPage from "../production/[id]/page";
+import { LotPage } from "./[id]/view";
+import { CoveragePage } from "../planning/coverage/view";
+import { PlanningPage } from "../planning/view";
+import { SchedulePage } from "../planning/schedule/view";
+import { ProductionPage } from "../production/view";
+import { NewBatchPage } from "../production/new/view";
+import { BatchPage } from "../production/[id]/view";
 
 export const dynamic = "force-dynamic";
 

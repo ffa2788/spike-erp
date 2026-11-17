@@ -1,27 +1,17 @@
-import { prisma } from "@/lib/db";
-import { formatWhen } from "@/lib/format";
-import { requireActor } from "@/server/actor";
-import { can } from "@/lib/permissions";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function AuditPage() {
-  const actor = await requireActor();
-  if (!can(actor.role, "postMoney") && actor.role !== "OWNER") {
-    return <p>The change history is for the owner and the partner.</p>;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const q = new URLSearchParams();
+  q.set("tab", "audit");
+  for (const key of ["notice", "error", "q"]) {
+    const value = sp[key];
+    if (typeof value === "string" && value) q.set(key, value);
   }
-  const rows = await prisma.auditLog.findMany({ orderBy: { at: "desc" }, take: 200 });
-  return (
-    <>
-      <h1>Change history</h1>
-      <div className="wrap"><table>
-        <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}><td>{formatWhen(row.at)}</td><td>{row.userName}</td><td>{row.summary}</td></tr>
-          ))}
-        </tbody>
-      </table></div>
-    </>
-  );
+  const suffix = q.toString();
+  redirect("/settings" + (suffix ? "?" + suffix : ""));
 }

@@ -4,13 +4,13 @@ import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { usd } from "@/lib/format";
 import { assessBooks } from "@/lib/read-models";
-import ReconcilePage from "./reconcile/page";
-import NewJournalPage from "./journal/new/page";
-import PayrollPage from "../payroll/page";
-import PayRunPage from "../payroll/runs/[id]/page";
-import TaxCenterPage from "../tax/page";
-import ReportsPage from "../reports/page";
-import ReportPage from "../reports/[slug]/page";
+import { ReconcilePage } from "./reconcile/view";
+import { NewJournalPage } from "./journal/new/view";
+import { PayrollPage } from "../payroll/view";
+import { PayRunPage } from "../payroll/runs/[id]/view";
+import { TaxCenterPage } from "../tax/view";
+import { ReportsPage } from "../reports/view";
+import { ReportPage } from "../reports/[slug]/view";
 
 export const dynamic = "force-dynamic";
 

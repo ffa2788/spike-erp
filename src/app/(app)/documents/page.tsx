@@ -4,7 +4,7 @@ import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
 import { generateDocAction } from "@/server/extra-actions";
-import DocumentPage from "./[id]/page";
+import { DocumentPage } from "./[id]/view";
 
 export const dynamic = "force-dynamic";
 

@@ -4,18 +4,18 @@ import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { formatDate, usd } from "@/lib/format";
 import { INVOICE_LABEL, ORDER_LABEL, QUOTE_LABEL } from "@/lib/labels";
-import CustomersPage from "../customers/page";
-import CustomerPage from "../customers/[id]/page";
-import NewCustomerPage from "../customers/new/page";
+import { CustomersPage } from "../customers/view";
+import { CustomerPage } from "../customers/[id]/view";
+import { NewCustomerPage } from "../customers/new/view";
 import { QuotePage } from "./quotes/[id]/view";
 import { NewQuotePage } from "./quotes/new/view";
 import { OrderPage } from "./orders/[id]/view";
 import { InvoicePage } from "./invoices/[id]/view";
 import { DeliveryPage } from "./deliveries/[id]/view";
-import AmazonPage from "./amazon/page";
-import AmazonImportPage from "./amazon/import/page";
-import AmazonWeekPage from "./amazon/week/page";
-import WalmartPage from "./walmart/page";
+import { AmazonPage } from "./amazon/view";
+import { AmazonImportPage } from "./amazon/import/view";
+import { AmazonWeekPage } from "./amazon/week/view";
+import { WalmartPage } from "./walmart/view";
 
 export const dynamic = "force-dynamic";
 

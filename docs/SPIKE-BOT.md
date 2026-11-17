@@ -6,11 +6,38 @@ The bot calls SPIKE with an API key. Create it under Settings → Integrations. 
 Authorization: Bearer spike_...
 ```
 
-Amazon reports, which replace typing those orders:
+Scopes are `read`, `sales`, `purchasing`, `planning`, and `money`. A GET needs `read`. Posting a quote, an order, a shipment, an invoice, or an Amazon report needs `sales`. A purchase order needs `purchasing`. Releasing the week to Trevor needs `planning`. A customer payment needs `money`.
 
-- `POST /api/amazon/import` multipart fields `orders`, `payments`, `settlement`, and `fba`. Or one file with `kind` and `file`. Needs the `sales` scope.
-- `GET /api/amazon/reconciliation?period=2026-11` JSON. Add `format=pdf` for the PDF. Needs a valid key.
+Nothing is delivered until email is configured. A customer email is a draft until you confirm it.
 
-The rest of the operation is under `/api/v1`. The list is `GET /api/openapi.json`. That includes customers, products, inventory, coverage, quotes, orders, shipments, invoices, payments, purchase orders, the production plan, dashboard alerts, and draft emails. A customer email is a draft until `POST /api/v1/messages/{id}/confirm`. Nothing is delivered until email is configured.
+## Amazon reports
+
+- `POST /api/amazon/import` multipart fields `orders`, `payments`, `settlement`, and `fba`. Or one file with `kind` and `file`.
+- `GET /api/amazon/reconciliation?period=2026-11` JSON. Add `format=pdf` for the PDF.
+- `GET /api/amazon/invoices.zip?period=2026-11` the stored A- invoice PDFs for that month.
 
 See `docs/AMAZON-SETUP.md` for the Seller Central files.
+
+## Everything else
+
+`GET /api/openapi.json` is the same list. Paths are under `/api/v1`.
+
+- `GET /api/v1/search?q=` customers, products, invoices, and quotes
+- `GET /api/v1/dashboard` cash, what customers owe, what we owe, inventory, and alerts
+- `GET /api/v1/customers` and `GET /api/v1/customers/{id}`
+- `GET /api/v1/products` and `GET /api/v1/products/{id}`
+- `GET /api/v1/inventory`
+- `GET /api/v1/coverage`
+- `POST /api/v1/quotes` and `PATCH /api/v1/quotes/{id}`
+- `GET /api/v1/quotes/{id}` and `GET /api/v1/quotes/{id}/pdf`
+- `POST /api/v1/quotes/{id}/order` accept the quote
+- `POST /api/v1/orders/{id}/ship`
+- `POST /api/v1/orders/{id}/invoice`
+- `GET /api/v1/invoices/{id}` and `GET /api/v1/invoices/{id}/pdf`
+- `POST /api/v1/purchase-orders` and `GET /api/v1/purchase-orders/{id}/pdf`
+- `GET /api/v1/work-lists/{id}/pdf`
+- `POST /api/v1/payments`
+- `POST /api/v1/production-plans/release`
+- `POST /api/v1/messages` draft a quote or invoice email
+- `GET /api/v1/messages/{id}`
+- `POST /api/v1/messages/{id}/confirm` send it, or log it if mail is not configured
