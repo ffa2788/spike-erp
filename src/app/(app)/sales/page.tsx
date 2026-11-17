@@ -14,6 +14,7 @@ import { InvoicePage } from "./invoices/[id]/view";
 import { DeliveryPage } from "./deliveries/[id]/view";
 import AmazonPage from "./amazon/page";
 import AmazonImportPage from "./amazon/import/page";
+import AmazonWeekPage from "./amazon/week/page";
 import WalmartPage from "./walmart/page";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ const TABS = [
   ["shipments", "Shipments"],
   ["customers", "Customers"],
   ["amazon", "Amazon"],
+  ["week", "Amazon week"],
   ["walmart", "Walmart"],
 ] as const;
 
@@ -157,6 +159,7 @@ export default async function SalesPage({
       )}
       {tab === "customers" && <CustomersPage searchParams={again} />}
       {tab === "amazon" && <><AmazonPage searchParams={again} /><AmazonImportPage searchParams={again} /></>}
+      {tab === "week" && <AmazonWeekPage searchParams={again} />}
       {tab === "walmart" && <WalmartPage searchParams={again} />}
     </Screen>
   );

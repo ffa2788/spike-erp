@@ -468,18 +468,48 @@ export function transferJournal(totalCents: number): DraftLine[] | null {
   ];
 }
 
-export function feeRowJournal(totalCents: number): DraftLine[] | null {
+/** Books each Amazon fee to its own account so the month is right and year-end is not one lump. */
+export function amazonFeeAccount(type: string, description = ""): string {
+  const text = `${type} ${description}`.toLowerCase();
+  if (text.includes("shipping service") || text.includes("shipping label")) return CODES.amazonShipping;
+  if (text.includes("subscription")) return CODES.amazonSubscription;
+  if (text.includes("storage") || text.includes("inventory fee")) return CODES.amazonStorage;
+  if (text.includes("advert") || text.includes("sponsored")) return CODES.amazonAds;
+  if (text.includes("fba")) return CODES.amazonFbaFee;
+  if (text.includes("selling") || text.includes("referral") || text.includes("commission")) return CODES.amazonReferral;
+  return CODES.amazonFees;
+}
+
+export function feeJournal(totalCents: number, accountCode: string = CODES.amazonFees, memo = "Amazon fee"): DraftLine[] | null {
   if (totalCents === 0) return null;
   if (totalCents < 0) {
     return [
-      { accountCode: CODES.amazonFees, debitCents: -totalCents, creditCents: 0, memo: "Amazon fee" },
-      { accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -totalCents, memo: "Amazon fee" },
+      { accountCode, debitCents: -totalCents, creditCents: 0, memo },
+      { accountCode: CODES.amazonClearing, debitCents: 0, creditCents: -totalCents, memo },
     ];
   }
   return [
-    { accountCode: CODES.amazonClearing, debitCents: totalCents, creditCents: 0, memo: "Amazon fee credit" },
-    { accountCode: CODES.amazonFees, debitCents: 0, creditCents: totalCents, memo: "Amazon fee credit" },
+    { accountCode: CODES.amazonClearing, debitCents: totalCents, creditCents: 0, memo },
+    { accountCode, debitCents: 0, creditCents: totalCents, memo },
   ];
+}
+
+export function settlementNetsToDeposit(rows: PaymentRow[]): { settlementId: string; activityCents: number; depositCents: number; differenceCents: number }[] {
+  const groups = new Map<string, PaymentRow[]>();
+  for (const row of rows) {
+    const list = groups.get(row.settlementId || "(none)") ?? [];
+    list.push(row);
+    groups.set(row.settlementId || "(none)", list);
+  }
+  return [...groups.entries()].map(([settlementId, lines]) => {
+    const depositCents = lines.filter((line) => line.type.trim().toLowerCase() === "transfer").reduce((sum, line) => sum - line.totalCents, 0);
+    const activityCents = lines.filter((line) => line.type.trim().toLowerCase() !== "transfer").reduce((sum, line) => sum + line.totalCents, 0);
+    return { settlementId, activityCents, depositCents, differenceCents: activityCents - depositCents };
+  });
+}
+
+export function feeRowJournal(totalCents: number): DraftLine[] | null {
+  return feeJournal(totalCents);
 }
 
 export function refundJournal(row: PaymentRow): DraftLine[] | null {

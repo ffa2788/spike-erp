@@ -35,12 +35,13 @@ export default async function AmazonImportPage({
         Chris does not type Amazon orders. Upload the Seller Central reports, or let the SPIKE bot post the same files.
         Buyer names are not stored. Every Amazon sale is the customer Amazon Customer. FBA and FBM stay on A- invoices.
       </p>
+      <p><Link href="/sales?tab=week">Open Amazon week</Link></p>
       <Flash error={query.error} notice={query.notice} />
       <div id="amazon-summary" className="banner">
         On file: {invoiceCount} A- invoices, {refunds} refunds, {usd(feeCents)} fees, deposit {usd(depositCents)}.
         {query.notice ? ` Last import: ${query.notice}` : " Upload a report below, or POST the same files to /api/amazon/import."}
       </div>
-      <p><Link href="/sales/amazon">Amazon connection</Link></p>
+      <p><Link href="/sales?tab=week">Open Amazon week</Link></p>
       <h2>All Orders</h2>
       <p>One row per item. You can upload several 30-day files. The same order item keeps the newer last-updated date. Cancelled rows are not sales. Shipped rows that map to a product become A- invoices and count in the production schedule.</p>
       <form action={importOrdersAction}>

@@ -3,6 +3,7 @@ import { parseDateInput } from "../dates";
 import { prisma } from "../db";
 import { err, ok, type Result } from "../result";
 import { postAmazonHistoryInvoice } from "./sales";
+import { assembleForAmazonOrders, storeAmazonInvoicePdf } from "./amazon-week";
 import type { Actor } from "./shared";
 
 export type AmazonImportSummary = {
@@ -116,6 +117,11 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     });
   }
   const unmapped = summary.unmapped.filter((row) => !mapBySku.has(row.sku));
+  for (const number of invoices) {
+    const invoice = await prisma.invoice.findUnique({ where: { number } });
+    if (invoice) await storeAmazonInvoicePdf(invoice.id).catch(() => undefined);
+  }
+  await assembleForAmazonOrders(actor);
   return ok({ ...summary, invoices, unmapped });
 }
 

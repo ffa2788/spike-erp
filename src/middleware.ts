@@ -41,6 +41,7 @@ function sendToScreen(request: NextRequest) {
     [/^\/sales\/orders\/([^/]+)$/, "/sales", ["tab", "orders", "id"]],
     [/^\/sales\/invoices\/([^/]+)$/, "/sales", ["tab", "invoices", "id"]],
     [/^\/sales\/deliveries\/([^/]+)$/, "/sales", ["tab", "shipments", "id"]],
+    [/^\/sales\/amazon\/week$/, "/sales", ["tab", "week"]],
     [/^\/sales\/amazon(?:\/import)?$/, "/sales", ["tab", "amazon"]],
     [/^\/sales\/walmart$/, "/sales", ["tab", "walmart"]],
     [/^\/products\/new$/, "/products", ["new", "1"]],

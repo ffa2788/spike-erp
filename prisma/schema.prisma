@@ -963,6 +963,23 @@ model FixedAsset {
   isExample           Boolean  @default(false)
 }
 
+model AmazonAssembly {
+  id          String    @id @default(cuid())
+  packedOn    DateTime
+  productId   String
+  sku         String
+  units       Int
+  runId       String    @default("")
+  confirmedAt DateTime?
+}
+
+model AmazonInvoiceFile {
+  invoiceId String @id
+  period    String
+  filename  String
+  pdf       Bytes
+}
+
 model FbaShipment {
   id           String   @id @default(cuid())
   shipmentId   String   @unique

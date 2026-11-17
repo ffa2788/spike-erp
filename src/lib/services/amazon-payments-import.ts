@@ -1,4 +1,4 @@
-import { CODES } from "../chart";
+import { CHART, CODES } from "../chart";
 import { rollUpCost } from "../costing";
 import { parseDateInput } from "../dates";
 import { prisma } from "../db";
@@ -6,7 +6,8 @@ import { contentsWeightLb, packagedCost, PACKAGE_PRESETS } from "../formula-math
 import { journalProblem } from "../journals";
 import {
   dedupePayments,
-  feeRowJournal,
+  amazonFeeAccount,
+  feeJournal,
   netMarginCents,
   parsePaymentsReport,
   readAmazonMoneyFile,
@@ -44,10 +45,17 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
   if (parsed.error) return err(parsed.error);
   const file = dedupePayments(parsed.rows);
   return run(async (tx) => {
+    for (const account of CHART.filter((item) => item.code.startsWith("61"))) {
+      await tx.account.upsert({
+        where: { code: account.code },
+        update: { name: account.name, type: account.type },
+        create: { ...account, isExample: true },
+      });
+    }
     await tx.account.upsert({
       where: { code: CODES.amazonClearing },
-      update: { name: "Amazon holds for payout", type: "ASSET" },
-      create: { code: CODES.amazonClearing, name: "Amazon holds for payout", type: "ASSET", isExample: true },
+      update: { name: "Due from Amazon", type: "ASSET" },
+      create: { code: CODES.amazonClearing, name: "Due from Amazon", type: "ASSET", isExample: true },
     });
     const [existing, maps, products, amazon] = await Promise.all([
       tx.amazonSettlementLine.findMany({ select: { fingerprint: true } }),
@@ -116,7 +124,12 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
     for (const row of fresh) {
       const type = row.type.trim().toLowerCase();
       if (type === "order" || type === "transfer") continue;
-      const journalLines = REFUND_TYPES.has(type) ? refundJournal(row) : FEE_TYPES.has(type) ? feeRowJournal(row.totalCents || rowEffect(row)) : null;
+      const feeMemo = type === "shipping services" && row.orderId ? `Amazon shipping label ${row.orderId}` : `Amazon ${row.type}`;
+      const journalLines = REFUND_TYPES.has(type)
+        ? refundJournal(row)
+        : FEE_TYPES.has(type)
+          ? feeJournal(row.totalCents || rowEffect(row), amazonFeeAccount(row.type, row.description), feeMemo)
+          : null;
       if (!journalLines) continue;
       if (REFUND_TYPES.has(type)) refunds += 1;
       else if (type === "adjustment" && (row.totalCents || rowEffect(row)) > 0) reimbursements += 1;
@@ -144,6 +157,7 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
         date: parseDateInput(row.day) ?? new Date(),
         memo: `Amazon payout ${row.settlementId || row.dateTime}`,
         source: "AMAZON_TRANSFER",
+        sourceId: row.settlementId,
         lines: journalLines,
         isExample: true,
       });

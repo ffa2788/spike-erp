@@ -36,6 +36,8 @@ describe("a sample Amazon week posts from the reports", () => {
     expect(money.value.refunds).toBeGreaterThan(0);
     expect(money.value.feeCents).toBeGreaterThan(0);
     expect(money.value.transferCents).toBe(123456);
+    const label = await prisma.journalLine.findFirst({ where: { account: { code: "6150" }, memo: { contains: "111-0000002-0000002" } } });
+    expect(label?.debitCents).toBe(450);
     expect(money.value.settled.length).toBeGreaterThan(0);
     const repeat = await importPaymentsFile(actor, payments);
     expect(repeat.ok).toBe(true);
