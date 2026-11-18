@@ -112,21 +112,23 @@ export function FormulaBuilder({
           </div>
           <div className="wrap">
             <table>
-              <thead><tr><th>Ingredient</th><th className="num">Pounds</th><th className="num">Percent</th><th></th></tr></thead>
+              <thead><tr><th>Ingredient</th><th className="num">Pounds</th><th className="num">Percent</th><th className="num">Cost</th><th></th></tr></thead>
               <tbody>
                 {rows.map((row, index) => {
                   const pounds = Number(row.pounds) > 0 ? Number(row.pounds) : 0;
                   const percent = totalLb > 0 ? (pounds / totalLb) * 100 : 0;
+                  const lineCost = pounds * (byId.get(row.ingredientId)?.costPerLb ?? 0);
                   return (
                     <tr key={row.ingredientId}>
                       <td>{byId.get(row.ingredientId)?.name ?? "Ingredient"}</td>
-                      <td className="num"><input style={{ width: 110, textAlign: "right" }} inputMode="decimal" value={row.pounds} onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, pounds: event.target.value } : item))} /></td>
+                      <td className="num"><input className="num" style={{ width: 110 }} inputMode="decimal" value={row.pounds} onChange={(event) => setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, pounds: event.target.value } : item))} /></td>
                       <td className="num">{totalLb > 0 ? `${percent.toFixed(1)}%` : "—"}</td>
+                      <td className="num">{pounds > 0 ? usdPrecise(lineCost) : "—"}</td>
                       <td><button className="btn secondary" type="button" onClick={() => setRows((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 ? <tr><td colSpan={4}>Search above and add the first ingredient.</td></tr> : null}
+                {rows.length === 0 ? <tr><td colSpan={5}>Search above and add the first ingredient.</td></tr> : null}
               </tbody>
             </table>
           </div>

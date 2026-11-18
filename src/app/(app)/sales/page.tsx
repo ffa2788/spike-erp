@@ -105,7 +105,7 @@ export default async function SalesPage({
                 <td>{quote.party.name}</td>
                 <td>{formatDate(quote.issuedOn)}</td>
                 <td className="num">{usd(quote.totalCents)}</td>
-                <td><span className="chip">{QUOTE_LABEL[quote.status]}</span></td>
+                <td><span className="chip" data-status={quote.status}>{QUOTE_LABEL[quote.status]}</span></td>
               </tr>
             ))}
           </tbody>
@@ -120,7 +120,7 @@ export default async function SalesPage({
                 <td><Link href={`/sales?tab=orders&id=${order.id}`}>{order.number}</Link></td>
                 <td>{order.party.name}</td>
                 <td>{formatDate(order.orderedOn)}</td>
-                <td><span className="chip">{ORDER_LABEL[order.status]}</span></td>
+                <td><span className="chip" data-status={order.status}>{ORDER_LABEL[order.status]}</span></td>
               </tr>
             ))}
           </tbody>
@@ -136,7 +136,7 @@ export default async function SalesPage({
                 <td>{invoice.party.name}</td>
                 <td>{formatDate(invoice.dueOn)}</td>
                 <td className="num">{usd(invoice.balanceCents)}</td>
-                <td><span className={`chip ${invoice.status === "VOID" ? "bad" : ""}`}>{INVOICE_LABEL[invoice.status]}</span></td>
+                <td><span className="chip" data-status={invoice.status}>{INVOICE_LABEL[invoice.status]}</span></td>
               </tr>
             ))}
           </tbody>

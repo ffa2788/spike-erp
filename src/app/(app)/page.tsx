@@ -3,7 +3,7 @@ import { Flash } from "@/components/ui";
 import { buildAttention } from "@/lib/attention";
 import { prisma } from "@/lib/db";
 import { toDateInput, todayInput } from "@/lib/dates";
-import { usd, formatDate, formatQty } from "@/lib/format";
+import { usd, formatDate, formatQty, formatWhen } from "@/lib/format";
 import { rollUpCost } from "@/lib/costing";
 import { lotQty, stockBuckets } from "@/lib/inventory";
 import { reorderSuggestion } from "@/lib/planning";
@@ -23,7 +23,7 @@ export default async function HomePage({
   const query = await readQuery(searchParams);
   const today = todayInput();
   const employeeCount = await prisma.employee.count({ where: { active: true } });
-  const [books, stock, bank, products, formulas, invoices, salesInvoices, bills, orders, deliveries, quotes, company, parties] = await Promise.all([
+  const [books, stock, bank, products, formulas, invoices, salesInvoices, bills, orders, deliveries, quotes, company, parties, activity] = await Promise.all([
     assessBooks(),
     currentStock(),
     bankPosition(),
@@ -40,6 +40,7 @@ export default async function HomePage({
     prisma.quote.findMany({ where: { status: { in: ["DRAFT", "SENT"] } }, include: { party: true } }),
     prisma.companyProfile.findUnique({ where: { id: "company" } }),
     prisma.party.findMany({ where: { taxExempt: true, exemptionExpires: { not: null } } }),
+    prisma.auditLog.findMany({ orderBy: { at: "desc" }, take: 8 }),
   ]);
   const materialPlan = await buildPlan(today);
   const critical = materialPlan.coverage.filter((row) => row.status === "CRITICAL").length;
@@ -155,14 +156,94 @@ export default async function HomePage({
   });
   return (
     <>
-      <h1>Today at SPER</h1>
-      <p className="lede">{formatDate(new Date())}. FFA and Chris both see the whole operation. Do the red and amber items first.</p>
+      <header className="screen-head">
+        <div>
+          <h1>Today</h1>
+          <p className="lede">{formatDate(new Date())}. Do the red and amber items first.</p>
+        </div>
+        <div className="head-actions">
+          <Link className="btn" href="/sales/quotes/new">New quote</Link>
+          <details className="kebab">
+            <summary aria-label="More actions">···</summary>
+            <div>
+              <Link href="/purchasing/orders/new">New purchase order</Link>
+              <Link href="/production/new">Plan a batch</Link>
+              <Link href="/planning/schedule">Release to Trevor</Link>
+              <Link href="/payroll">Payroll</Link>
+            </div>
+          </details>
+        </div>
+      </header>
       <Flash error={query.error} notice={query.notice} />
       {!books.check.ok && (
         <div className="banner bad">Stop. {books.check.problems[0]}</div>
       )}
-      <div className="cards">
+      <div className="kpis">
         <Link className="card" href="/reports/sales"><span>Sales this month</span><strong>{usd(dash.mtd.salesCents)}</strong><p className="muted">{dash.mtd.versus.words}</p></Link>
+        <Link className="card" href="/money"><span>Cash and receivables</span><strong>{usd(dash.cashCents)}</strong><p className="muted">Customers owe {usd(dash.receivableCents)}. Overdue {usd(dash.overdueCents)}.</p></Link>
+        <Link className="card" href="/inventory?tab=coverage"><span>Low stock</span><strong>{dash.belowReorder}</strong><p className="muted">{dash.criticalCoverage} critical, {dash.lowCoverage} low on coverage.</p></Link>
+        <Link className="card" href="/sales?tab=orders"><span>Open orders</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>
+      </div>
+      <div className="home-split">
+        <section>
+          <h2>Needs attention</h2>
+          {attention.length === 0 ? (
+            <div className="empty">
+              <p>Nothing is waiting on you today.</p>
+              <Link className="btn" href="/sales/quotes/new">New quote</Link>
+            </div>
+          ) : (
+            <div className="attention">
+              {attention.map((item) => (
+                <Link key={item.title} href={item.href}>
+                  <article className={`card ${item.tone}`}>
+                    <strong>{item.title}</strong>
+                    <span>{item.detail}</span>
+                  </article>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+        <section>
+          <h2>Recent activity</h2>
+          {activity.length === 0 ? (
+            <div className="empty"><p>Nothing has been recorded yet.</p></div>
+          ) : (
+            <div className="activity">
+              {activity.map((row) => (
+                <article key={row.id}>
+                  <strong>{row.userName}</strong>
+                  <span>{row.summary}</span>
+                  <time dateTime={row.at.toISOString()}>{formatWhen(row.at)}</time>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+      <h2>Top products this year</h2>
+      <div className="wrap"><table>
+        <thead><tr><th>Product</th><th className="num">Sales</th><th className="num">Margin</th></tr></thead>
+        <tbody>
+          {dash.topProducts.map((row) => (
+            <tr key={row.name}><td><Link href="/reports/margins">{row.name}</Link></td><td className="num">{usd(row.salesCents)}</td><td className="num">{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
+          ))}
+          {dash.topProducts.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
+        </tbody>
+      </table></div>
+      <h2>Top customers this year</h2>
+      <div className="wrap"><table>
+        <thead><tr><th>Customer</th><th className="num">Sales</th><th className="num">Margin</th></tr></thead>
+        <tbody>
+          {dash.topCustomers.map((row) => (
+            <tr key={row.name}><td><Link href="/reports/sales">{row.name}</Link></td><td className="num">{usd(row.salesCents)}</td><td className="num">{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
+          ))}
+          {dash.topCustomers.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
+        </tbody>
+      </table></div>
+      <h2>More numbers</h2>
+      <div className="cards">
         <Link className="card" href="/reports/sales"><span>Sales this year</span><strong>{usd(dash.ytd.salesCents)}</strong><p className="muted">{dash.ytd.versus.words}</p></Link>
         <Link className="card" href="/reports/margins"><span>Gross margin</span><strong>{dash.marginPercent == null ? "—" : `${dash.marginPercent}%`}</strong><p className="muted">Sales minus the full cost on those invoices.</p></Link>
         {dash.channels.map((channel) => (
@@ -173,56 +254,11 @@ export default async function HomePage({
           </Link>
         ))}
         <Link className="card" href="/sales"><span>Open quotes</span><strong>{dash.quoteCount}</strong><p className="muted">Pipeline {usd(dash.pipelineCents)}</p></Link>
-        <Link className="card" href="/reports/ar"><span>Overdue from customers</span><strong>{usd(dash.overdueCents)}</strong><p className="muted">They owe {usd(dash.receivableCents)} in total.</p></Link>
-        <Link className="card" href="/reports/ap"><span>Bills due in 14 days</span><strong>{usd(dash.payablesSoonCents)}</strong><p className="muted">{dash.payablesSoonCount} bill{dash.payablesSoonCount === 1 ? "" : "s"}, including any already late.</p></Link>
-        <Link className="card" href="/money"><span>Cash in the bank</span><strong>{usd(dash.cashCents)}</strong></Link>
+        <Link className="card" href="/reports/ap"><span>Bills due in 14 days</span><strong>{usd(dash.payablesSoonCents)}</strong><p className="muted">{dash.payablesSoonCount} bill{dash.payablesSoonCount === 1 ? "" : "s"}.</p></Link>
         <Link className="card" href="/money/reconcile"><span>Unreconciled bank lines</span><strong>{dash.unreconciled}</strong></Link>
-        <Link className="card" href="/inventory"><span>Inventory</span><strong>{usd(dash.inventoryCents)}</strong><p className="muted">{dash.belowReorder} below the reorder point.</p></Link>
-        <Link className="card" href="/planning/coverage"><span>Low coverage</span><strong>{dash.criticalCoverage} critical, {dash.lowCoverage} low</strong><p className="muted">Days of cover from the materials plan.</p></Link>
-        <Link className="card" href="/sales"><span>Waiting to ship</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>
+        <Link className="card" href="/inventory"><span>Inventory</span><strong>{usd(dash.inventoryCents)}</strong></Link>
         <Link className="card" href="/tax"><span>Next tax date</span><strong>{dash.taxDeadlines[0] ? formatDate(dash.taxDeadlines[0].date) : "None"}</strong><p className="muted">{dash.taxDeadlines[0]?.name}</p></Link>
-        <Link className="card" href="/payroll"><span>Payroll</span><strong>{employeeCount} {employeeCount === 1 ? "person" : "people"}</strong><p className="muted">Florida. No state income tax. The accountant reviews the tax table.</p></Link>
-      </div>
-      <h2>Top products this year</h2>
-      <div className="wrap"><table>
-        <thead><tr><th>Product</th><th>Sales</th><th>Margin</th></tr></thead>
-        <tbody>
-          {dash.topProducts.map((row) => (
-            <tr key={row.name}><td><Link href="/reports/margins">{row.name}</Link></td><td>{usd(row.salesCents)}</td><td>{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
-          ))}
-          {dash.topProducts.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
-        </tbody>
-      </table></div>
-      <h2>Top customers this year</h2>
-      <div className="wrap"><table>
-        <thead><tr><th>Customer</th><th>Sales</th><th>Margin</th></tr></thead>
-        <tbody>
-          {dash.topCustomers.map((row) => (
-            <tr key={row.name}><td><Link href="/reports/sales">{row.name}</Link></td><td>{usd(row.salesCents)}</td><td>{row.marginPercent == null ? "—" : `${row.marginPercent}%`}</td></tr>
-          ))}
-          {dash.topCustomers.length === 0 && <tr><td colSpan={3}>No sales yet this year.</td></tr>}
-        </tbody>
-      </table></div>
-      <h2>What needs attention</h2>
-      {attention.length === 0 ? <p>Nothing is waiting on you today.</p> : (
-        <div className="attention">
-          {attention.map((item) => (
-            <Link key={item.title} href={item.href}>
-              <article className={`card ${item.tone}`}>
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
-              </article>
-            </Link>
-          ))}
-        </div>
-      )}
-      <h2>Start something</h2>
-      <div className="row">
-        <Link className="btn" href="/sales/quotes/new">New quote</Link>
-        <Link className="btn" href="/purchasing/orders/new">New purchase order</Link>
-        <Link className="btn secondary" href="/production/new">Plan a batch</Link>
-        <Link className="btn secondary" href="/planning/schedule">Release to Trevor</Link>
-        <Link className="btn secondary" href="/payroll">Payroll</Link>
+        <Link className="card" href="/payroll"><span>Payroll</span><strong>{employeeCount} {employeeCount === 1 ? "person" : "people"}</strong></Link>
       </div>
       <p className="muted">Sales are product sales before tax. Gross margin uses the cost recorded on those same invoices, including the recipe and packaging in that cost. Month and year are compared with the same dates last month and last year.</p>
       <p className="muted">{formatQty(stock.reduce((sum, lot) => sum + lotQty(lot), 0))} on hand across all lots, including lots waiting for quality.</p>

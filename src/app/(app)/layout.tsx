@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { HelpPanel } from "@/components/help-panel";
+import { SearchBox } from "@/components/search-box";
 import { SideNav } from "@/components/shell";
 import { logout } from "@/server/auth-actions";
 import { requireActor } from "@/server/actor";
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }),
   ]);
   const sections = parseManual(manualRow?.body || shippedManual()).sections;
+  const initials = user.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div className="app">
       <aside className="nav">
@@ -34,44 +36,43 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <SideNav />
-        <div className="who">
-          <strong>{user.name}</strong>
-          <span>{ROLE_LABEL[user.role]}</span>
-          <form action={logout}>
-            <button className="btn secondary" type="submit">Sign out</button>
-          </form>
-        </div>
       </aside>
-      <main>
+      <div className="main-col">
         <div className="topbar no-print">
-          <form action="/search">
-            <label className="field">Find an invoice, order, or marketplace number
-              <input name="q" placeholder="S-000001, A-, W-, or E-" />
-            </label>
-            <button className="btn secondary" type="submit">Search</button>
-          </form>
-          <Suspense fallback={<button className="btn secondary" type="button">Help</button>}>
-            <HelpPanel
-              sections={sections}
-              badge={badge}
-              requests={requests.map((row) => ({
-                id: row.id,
-                screen: row.screen,
-                recordRef: row.recordRef,
-                message: row.message,
-                status: row.status,
-                answer: row.answer,
-              }))}
-            />
-          </Suspense>
-        </div>
-        {company?.showExampleBanner && (
-          <div className="banner example">
-            Example data is loaded. These are not real customers, prices, lots, or certificates.
+          <SearchBox />
+          <div className="top-actions">
+            <Suspense fallback={<button className="btn secondary" type="button">Help</button>}>
+              <HelpPanel
+                sections={sections}
+                badge={badge}
+                requests={requests.map((row) => ({
+                  id: row.id,
+                  screen: row.screen,
+                  recordRef: row.recordRef,
+                  message: row.message,
+                  status: row.status,
+                  answer: row.answer,
+                }))}
+              />
+            </Suspense>
+            <div className="who">
+              <span className="avatar" title={ROLE_LABEL[user.role]}>{initials}</span>
+              <span className="who-name">{user.name}</span>
+              <form action={logout}>
+                <button className="btn ghost" type="submit">Sign out</button>
+              </form>
+            </div>
           </div>
-        )}
-        {children}
-      </main>
+        </div>
+        <main>
+          {company?.showExampleBanner && (
+            <div className="banner example">
+              Example data is loaded. These are not real customers, prices, lots, or certificates.
+            </div>
+          )}
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
