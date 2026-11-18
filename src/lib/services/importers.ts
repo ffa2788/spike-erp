@@ -122,13 +122,17 @@ export async function commitPeachtree(actor: Actor, csv: string, kind: string): 
     }
     if (kind === "journal") {
       const preview = validateJournal(table.rows, keys);
+      let saved = 0;
       for (const group of preview.ready) {
         const date = parseDateInput(group.date);
         if (!date) return err(`Reference ${group.reference} has a bad date.`);
+        const already = await tx.journalEntry.findFirst({ where: { source: "PEACHTREE", sourceId: group.reference } });
+        if (already) continue;
         const posted = await postJournal(tx, actor, {
           date,
           memo: `${group.reference}: ${group.memo}`,
           source: "PEACHTREE",
+          sourceId: group.reference,
           lines: group.lines.map((line) => ({
             accountCode: line.accountCode,
             debitCents: line.debitCents,
@@ -137,8 +141,9 @@ export async function commitPeachtree(actor: Actor, csv: string, kind: string): 
           })),
         });
         if (!posted.ok) return posted;
+        saved += 1;
       }
-      return ok({ saved: preview.ready.length, skipped: preview.rows.filter((row) => row.status === "error").length });
+      return ok({ saved, skipped: preview.rows.filter((row) => row.status === "error").length + (preview.ready.length - saved) });
     }
     return err("Choose customers, suppliers, items, accounts, or a journal.");
   });
