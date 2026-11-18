@@ -1,19 +1,114 @@
 "use client";
 
-import { useActionState } from "react";
-import { peachtreeAction, type PeachtreeState } from "@/server/import-action";
+import { useActionState, useState } from "react";
+import { IMPORT_ORDER, KIND_LABEL } from "@/lib/import-bundle";
+import { commitBundleAction, peachtreeAction, previewBundleAction, type BundleState, type PeachtreeState } from "@/server/import-action";
 
 const initial: PeachtreeState = { rows: [], ready: 0, skipped: 0, kind: "" };
 
 export function ImportPage() {
   const [state, action, pending] = useActionState(peachtreeAction, initial);
+  const [bundle, setBundle] = useState<BundleState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function take(list: FileList | null) {
+    if (!list?.length) return;
+    const data = new FormData();
+    for (const file of list) data.append("files", file);
+    setBusy(true);
+    setBundle(await previewBundleAction(data));
+    setBusy(false);
+  }
+
+  async function changeKind(index: number, kind: string) {
+    if (!bundle) return;
+    const data = new FormData();
+    bundle.files.forEach((file, fileIndex) => {
+      data.append("name", file.name);
+      data.append("csv", file.csv);
+      data.append("kind", fileIndex === index ? kind : file.kind);
+    });
+    setBusy(true);
+    setBundle(await previewBundleAction(data));
+    setBusy(false);
+  }
+
   return (
     <>
       <h1>Bring in data</h1>
       <p className="lede">
-        Peachtree 2011 files can be customers, suppliers, items, accounts, or a journal. SPIKE shows a preview and skips bad rows. Nothing is saved until you confirm.
+        Drop every Peachtree file at once. SPIKE reads CSV and Excel, detects each file, and posts them in cutover order. Bad rows are named and skipped. Importing the same files again does not create duplicates.
       </p>
-      <p>Amazon and Walmart orders can be imported from a CSV when those connections are not set up. Fees are recorded as an expense, not as sales. Connected accounts are under Sales.</p>
+      <div
+        className="dropzone"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          void take(event.dataTransfer.files);
+        }}
+      >
+        <p>Drop files here, or choose them.</p>
+        <input type="file" multiple accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void take(event.target.files)} />
+      </div>
+      {busy && <p className="muted">Reading the files…</p>}
+      {bundle?.error && <div className="banner bad">Problem: {bundle.error}</div>}
+      {bundle?.notice && <div className="banner good">Done: {bundle.notice}</div>}
+      {bundle && bundle.files.length > 0 && (
+        <>
+          <div className="wrap"><table>
+            <thead><tr><th>Order</th><th>File</th><th>Kind</th><th className="num">Ready</th></tr></thead>
+            <tbody>
+              {bundle.files.map((file, index) => (
+                <tr key={`${file.name}-${index}`}>
+                  <td>{index + 1}</td>
+                  <td>{file.name}</td>
+                  <td>
+                    <select value={file.kind} onChange={(event) => void changeKind(index, event.target.value)}>
+                      <option value="">Choose</option>
+                      {IMPORT_ORDER.map((kind) => <option key={kind} value={kind}>{KIND_LABEL[kind]}</option>)}
+                    </select>
+                  </td>
+                  <td className="num">{file.ready}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+          <p>{bundle.okRows} rows are ready. {bundle.errors.length} rows have errors.</p>
+          {bundle.errors.length > 0 && (
+            <div className="wrap"><table>
+              <thead><tr><th>File</th><th>Row</th><th>What SPIKE read</th><th>Notes</th></tr></thead>
+              <tbody>
+                {bundle.errors.map((row) => (
+                  <tr key={`${row.file}-${row.rowNumber}-${row.summary}`}>
+                    <td>{row.file}</td>
+                    <td>{row.rowNumber}</td>
+                    <td>{row.summary}</td>
+                    <td>{row.messages.join(" ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          )}
+          <h2>Tie-out</h2>
+          <ul>
+            {bundle.checks.map((check) => (
+              <li key={check.name}>{check.ok ? "OK" : "Check"} · {check.name}: {check.detail}</li>
+            ))}
+          </ul>
+          <form action={async (formData) => setBundle(await commitBundleAction(formData))}>
+            {bundle.files.map((file, index) => (
+              <span key={`${file.name}-${index}`}>
+                <input type="hidden" name="name" value={file.name} />
+                <input type="hidden" name="kind" value={file.kind} />
+                <input type="hidden" name="csv" value={file.csv} />
+              </span>
+            ))}
+            <button className="btn" type="submit" disabled={busy || bundle.files.every((file) => !file.kind)}>Confirm and import</button>
+          </form>
+        </>
+      )}
+      <h2>One file</h2>
+      <p>Amazon and Walmart orders, or a single file if you would rather paste it.</p>
       {state.error && <div className="banner bad">Problem: {state.error}</div>}
       {state.notice && <div className="banner good">Done: {state.notice}</div>}
       <form action={action}>

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const SPIKE_SCOPES = ["read", "sales", "purchasing", "planning", "money"] as const;
+export const SPIKE_SCOPES = ["read", "sales", "purchasing", "planning", "money", "import"] as const;
 export type SpikeScope = (typeof SPIKE_SCOPES)[number];
 
 export function hashApiKey(raw: string): string {
@@ -19,6 +19,10 @@ export function parseScopes(value: string): SpikeScope[] {
 
 export function scopeAllows(scopes: string, needed: SpikeScope): boolean {
   return parseScopes(scopes).includes(needed);
+}
+
+export function canImport(scopes: string): boolean {
+  return scopeAllows(scopes, "sales") || scopeAllows(scopes, "import");
 }
 
 export function keysMatch(storedHash: string, raw: string): boolean {

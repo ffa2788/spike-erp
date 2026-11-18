@@ -6,7 +6,7 @@ The bot calls SPIKE with an API key. Create it under Settings → Integrations. 
 Authorization: Bearer spike_...
 ```
 
-Scopes are `read`, `sales`, `purchasing`, `planning`, and `money`. A GET needs `read`. Posting a quote, an order, a shipment, an invoice, or an Amazon report needs `sales`. A purchase order needs `purchasing`. Releasing the week to Trevor needs `planning`. A customer payment needs `money`.
+Scopes are `read`, `sales`, `purchasing`, `planning`, `money`, and `import`. A GET needs `read`. Posting a quote, an order, a shipment, an invoice, or an Amazon report needs `sales`. A purchase order needs `purchasing`. Releasing the week to Trevor needs `planning`. A customer payment needs `money`. A cutover import needs `sales` or `import`. A key that already has `sales` can import. New keys also get `import`.
 
 Nothing is delivered until email is configured. A customer email is a draft until you confirm it.
 
@@ -18,6 +18,10 @@ Help requests from the Help button:
 - `POST /api/v1/help-requests/{id}/answer` with `{ "answer": "..." }`
 
 The answer shows in that person's Help panel, with a badge on the Help button. Opening a request emails FFA, or logs the email if mail is not configured. Both calls are audit rows.
+
+## Cutover import
+
+`POST /api/v1/imports` takes multipart field `files` (one or more CSV or XLSX files). Add `dryRun=true` as a form field or query to preview without saving. SPIKE detects each file from its headers, sorts them in the go-live order, and returns the ready rows, the named errors, and the tie-out checks. Without `dryRun`, it posts each file in its own transaction. Sending the same files again does not create duplicates. The key needs `sales` or `import`.
 
 ## Amazon reports
 
