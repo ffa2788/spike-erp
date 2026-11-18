@@ -186,10 +186,12 @@ model User {
   name         String
   passwordHash String
   role         Role
-  totpSecret   String?
-  totpEnabled  Boolean  @default(false)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  totpSecret         String?
+  totpEnabled        Boolean  @default(false)
+  active             Boolean  @default(true)
+  mustChangePassword Boolean  @default(false)
+  sessionVersion     Int      @default(0)
+  createdAt          DateTime @default(now())
 }
 
 model LoginAttempt {

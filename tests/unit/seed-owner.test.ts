@@ -22,7 +22,8 @@ describe("production seed", () => {
       password: "long-enough-password",
       generated: false,
     });
-    expect(() => initialPassword({ OWNER_PASSWORD: "short" })).toThrow(/12/);
+    expect(initialPassword({ OWNER_PASSWORD: "12345678" }).generated).toBe(false);
+    expect(() => initialPassword({ OWNER_PASSWORD: "short" })).toThrow(/8/);
     const generated = initialPassword({}, () => "generated-value");
     expect(generated).toEqual({ password: "generated-value", generated: true });
     const dir = await mkdtemp(join(tmpdir(), "spike-owner-"));

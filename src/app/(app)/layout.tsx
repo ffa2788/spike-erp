@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { HelpPanel } from "@/components/help-panel";
 import { BrandMark } from "@/components/brand-mark";
@@ -53,8 +54,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               />
             </Suspense>
             <div className="who">
-              <span className="avatar" title={ROLE_LABEL[user.role]}>{initials}</span>
-              <span className="who-name">{user.name}</span>
+              <Link href="/account" className="who-link" title="My account">
+                <span className="avatar" title={ROLE_LABEL[user.role]}>{initials}</span>
+                <span className="who-name">{user.name}</span>
+              </Link>
+              <Link href="/account" className="btn ghost">My account</Link>
               <form action={logout}>
                 <button className="btn ghost" type="submit">Sign out</button>
               </form>
