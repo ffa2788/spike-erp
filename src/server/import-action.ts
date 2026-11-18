@@ -3,7 +3,9 @@
 import { parseCsv } from "@/lib/csv";
 import { prisma } from "@/lib/db";
 import { validateAmazonOrders } from "@/lib/amazon";
+import { detectGolive, validateBoms, validateFormulas, validateOpenAp, validateOpenAr, validateStock, validateTrial, type GoliveExisting } from "@/lib/golive";
 import { detectKind, validateAccounts, validateCustomers, validateItems, validateJournal } from "@/lib/peachtree";
+import { commitGolive } from "@/lib/services/golive-import";
 import { commitMarketplace, commitPeachtree } from "@/lib/services/importers";
 import { requireCan } from "./actor";
 
@@ -16,6 +18,31 @@ export type PeachtreeState = {
   skipped: number;
   rows: { rowNumber: number; status: string; summary: string; messages: string[] }[];
 };
+
+async function goliveKeys(): Promise<GoliveExisting> {
+  const [products, parties, accounts, invoices, bills, lots, formulas, boms, trial] = await Promise.all([
+    prisma.product.findMany(),
+    prisma.party.findMany(),
+    prisma.account.findMany(),
+    prisma.invoice.findMany({ select: { number: true } }),
+    prisma.vendorBill.findMany({ select: { number: true } }),
+    prisma.lot.findMany({ select: { lotNumber: true } }),
+    prisma.formula.findMany({ where: { isDefault: true }, include: { product: true } }),
+    prisma.packagedSku.findMany({ include: { outputProduct: true } }),
+    prisma.journalEntry.findFirst({ where: { source: "OPENING", sourceId: "TRIAL" } }),
+  ]);
+  return {
+    skus: products.map((product) => product.sku),
+    partyCodes: parties.map((party) => party.code),
+    accountCodes: accounts.map((account) => account.code),
+    invoiceNumbers: invoices.map((invoice) => invoice.number),
+    billNumbers: bills.map((bill) => bill.number),
+    lotNumbers: lots.map((lot) => lot.lotNumber),
+    formulaSkus: formulas.map((formula) => formula.product.sku),
+    bomOutputs: boms.map((bom) => bom.outputProduct.sku),
+    trialPosted: Boolean(trial),
+  };
+}
 
 export async function peachtreeAction(_prev: PeachtreeState, formData: FormData): Promise<PeachtreeState> {
   const actor = await requireCan("importData");
@@ -46,6 +73,28 @@ export async function peachtreeAction(_prev: PeachtreeState, formData: FormData)
     };
   }
   const table = parseCsv(csv);
+  const golive = requested || detectGolive(table.headers) || "";
+  if (["stock", "ar", "ap", "trial", "formula", "bom"].includes(golive)) {
+    const existing = await goliveKeys();
+    const preview = golive === "stock" ? validateStock(table.rows, existing)
+      : golive === "ar" ? validateOpenAr(table.rows, existing)
+      : golive === "ap" ? validateOpenAp(table.rows, existing)
+      : golive === "trial" ? validateTrial(table.rows, existing)
+      : golive === "formula" ? validateFormulas(table.rows, existing)
+      : validateBoms(table.rows, existing);
+    if (formData.get("commit") === "yes") {
+      const result = await commitGolive(actor, csv, golive);
+      if (!result.ok) return { kind: golive, csv, ready: 0, skipped: 0, rows: [], error: result.error };
+      return { kind: golive, csv: "", ready: result.value.saved, skipped: result.value.skipped, rows: [], notice: `Imported ${result.value.saved}. Skipped ${result.value.skipped}.` };
+    }
+    return {
+      kind: golive,
+      csv,
+      ready: preview.ready.length,
+      skipped: preview.rows.length - preview.ready.length,
+      rows: preview.rows.map((row) => ({ rowNumber: row.rowNumber, status: row.status, summary: row.summary, messages: row.messages })),
+    };
+  }
   const kind = requested || detectKind(table.headers) || "";
   if (!kind) return { kind: "", csv, ready: 0, skipped: 0, rows: [], error: "SPIKE could not tell what kind of file this is. Choose one." };
   if (formData.get("commit") === "yes") {

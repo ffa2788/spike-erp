@@ -25,6 +25,12 @@ export function ImportPage() {
             <option value="items">Items</option>
             <option value="accounts">Accounts</option>
             <option value="journal">Journal</option>
+            <option value="stock">Opening stock count</option>
+            <option value="ar">Open customer invoices</option>
+            <option value="ap">Open vendor bills</option>
+            <option value="trial">Opening trial balance</option>
+            <option value="formula">Formulas</option>
+            <option value="bom">Packaging lists</option>
             <option value="amazon">Amazon orders</option>
             <option value="walmart">Walmart orders</option>
           </select>
@@ -61,6 +67,12 @@ export function ImportPage() {
         <li><a href="/examples/peachtree-customers.csv">Customers</a></li>
         <li><a href="/examples/peachtree-items.csv">Items</a></li>
         <li><a href="/examples/peachtree-journal.csv">Journal</a></li>
+        <li><a href="/examples/peachtree-stock.csv">Opening stock</a></li>
+        <li><a href="/examples/peachtree-ar.csv">Open invoices</a></li>
+        <li><a href="/examples/peachtree-ap.csv">Open bills</a></li>
+        <li><a href="/examples/peachtree-trial.csv">Opening trial balance</a></li>
+        <li><a href="/examples/peachtree-formula.csv">Formulas</a></li>
+        <li><a href="/examples/peachtree-bom.csv">Packaging lists</a></li>
         <li><a href="/examples/amazon-orders.csv">Amazon orders</a></li>
         <li><a href="/examples/bank-statement.csv">Bank statement</a></li>
       </ul>

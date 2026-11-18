@@ -1,0 +1,1 @@
+ALTER TABLE "VendorBill" ALTER COLUMN "receiptId" DROP NOT NULL;

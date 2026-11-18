@@ -28,6 +28,8 @@ describe("invoice numbers", () => {
     const third = await prisma.$transaction((tx) => takeNumber(tx, "numtest"));
     expect(third).toBe(3);
     expect(formatSequence("invoice-A", 1)).toBe("A-000001");
+    expect(formatSequence("invoice-W", 2)).toBe("W-000002");
+    expect(formatSequence("invoice-E", 3)).toBe("E-000003");
     expect(formatSequence("invoice-W", 1)).toBe("W-000001");
     expect(formatSequence("invoice-S", 1)).not.toBe(formatSequence("invoice-A", 1));
   });

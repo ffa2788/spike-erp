@@ -53,9 +53,8 @@ export async function audit(
 }
 
 export function formatSequence(name: string, value: number): string {
-  if (name === "invoice-S" || name === "invoice-A" || name === "invoice-W") {
-    const prefix = name.slice(-1);
-    return `${prefix}-${String(value).padStart(6, "0")}`;
+  if (name === "invoice-S" || name === "invoice-A" || name === "invoice-W" || name === "invoice-E") {
+    return `${name.slice(-1)}-${String(value).padStart(6, "0")}`;
   }
   if (name === "quote") return `Q-${String(value).padStart(4, "0")}`;
   const sequence = SEQUENCES.find((item) => item.name === name);
