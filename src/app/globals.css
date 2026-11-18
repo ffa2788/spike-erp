@@ -365,6 +365,26 @@ summary { cursor: pointer; font-weight: 650; min-height: 40px; }
 .watermark { color: #8d1d1d; font-weight: 800; letter-spacing: 0.08em; }
 .diamond { width: 74px; height: 74px; }
 
+.pnl { background: white; max-width: 760px; margin: 0.4rem auto 1.5rem; padding: 1.6rem 0.4rem 2rem; color: #1a1a1a; }
+.pnl header { text-align: center; margin-bottom: 1.4rem; }
+.pnl .company { font-size: 1.15rem; font-weight: 650; }
+.pnl .doc { font-size: 1rem; font-weight: 650; margin-top: 0.1rem; }
+.pnl .period { margin-top: 0.1rem; }
+.pnl .example { margin-top: 0.35rem; color: #667085; font-size: 0.78rem; }
+.pnl table { background: transparent; box-shadow: none; border: 0; border-collapse: collapse; }
+.pnl th, .pnl td { border: 0; background: transparent; padding: 0.38rem 0; font-size: 0.92rem; }
+.pnl th { text-align: right; font-size: 0.78rem; font-weight: 650; letter-spacing: 0; text-transform: none; color: #1a1a1a; position: static; padding-bottom: 0.45rem; border-bottom: 1px solid #1a1a1a; }
+.pnl th:first-child { text-align: left; }
+.pnl td:nth-child(n+2) { text-align: right; width: 7.4rem; font-variant-numeric: tabular-nums; }
+.pnl tr.header td { padding-top: 0.95rem; font-weight: 650; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #344054; }
+.pnl tr.detail td:first-child { padding-left: 1.1rem; font-weight: 450; }
+.pnl tr.total td { font-weight: 700; }
+.pnl tr.rule td { border-top: 1px solid #1a1a1a; }
+.pnl tr.double td { border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; font-size: 1.05rem; padding-top: 0.5rem; padding-bottom: 0.2rem; }
+.pnl tr.close td { border-bottom: 1px solid #1a1a1a; height: 4px; padding: 0; line-height: 0; font-size: 0; }
+.pnl tr.note td { color: #667085; font-size: 0.75rem; padding-top: 0; padding-left: 1.1rem; }
+.pnl tr:nth-child(even), .pnl tr:hover { background: transparent; }
+.pnl .neg { color: #9f3a3a; }
 .skeleton { background: linear-gradient(90deg, #eef1f4 25%, #f7f8fa 37%, #eef1f4 63%); background-size: 400% 100%; animation: shine 1.2s ease infinite; border-radius: 12px; }
 .skeleton.title { height: 28px; width: 220px; margin-bottom: 1rem; }
 .skeleton.card { height: 108px; }

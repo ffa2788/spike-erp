@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { channelSales, customerSales, numberGaps, periodWindow, productSales, profitStatement } from "@/lib/owner-reports";
+import { presentProfit, statementMoney, statementTitle } from "@/lib/pnl-present";
 
 describe("owner reports", () => {
   it("compares a month with the month before it, and a week with the week before it", () => {
@@ -50,6 +51,11 @@ describe("owner reports", () => {
     expect(lines.find((line) => line.label === "Net revenue")).toMatchObject({ month: 9300 });
     expect(lines.find((line) => line.label === "Gross profit")).toMatchObject({ month: 5300 });
     expect(lines.find((line) => line.label === "Net income")).toMatchObject({ month: 4400, prior: 4000, ytd: 9400 });
+    const shown = presentProfit(lines);
+    expect(shown.find((row) => row.label === "Net income")).toMatchObject({ month: 4400, prior: 4000, ytd: 9400 });
+    expect(statementMoney(-860456, true)).toBe("($8,604.56)");
+    expect(statementMoney(1254100, false)).toBe("12,541.00");
+    expect(statementTitle("2026-10-01", "2026-10-31")).toBe("October 1 – 31, 2026");
   });
 
   it("finds a missing invoice number and ignores a solid run", () => {

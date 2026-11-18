@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProfitStatement } from "@/components/profit-statement";
 import { usd } from "@/lib/format";
 import { AGING_LABEL } from "@/lib/aging";
 import { agingReport, balanceReport, customerReport, mrpReport, productReport, profitReport, salesReport, type ReportQuery } from "@/lib/services/owner-reports";
@@ -24,7 +25,7 @@ export async function OwnerReport({ kind, query, base }: { kind: string; query: 
         <a className="btn secondary" href={`/api/reports/products.csv?period=${period}&anchor=${query.anchor || "2026-10-15"}`}>Product CSV</a>
         <a className="btn secondary" href={`/api/reports/profit.pdf?period=${period}&anchor=${query.anchor || "2026-10-15"}`}>P&amp;L PDF</a>
       </form>
-      <p className="muted">Example data. These are not real sales or costs.</p>
+      {kind === "profit" ? null : <p className="muted">Example data. These are not real sales or costs.</p>}
       {kind === "sales" ? <Sales kindQuery={query} /> : null}
       {kind === "products" ? <Products kindQuery={query} /> : null}
       {kind === "customers" ? <Customers kindQuery={query} /> : null}
@@ -112,19 +113,7 @@ async function Mrp() {
 
 async function Profit({ kindQuery }: { kindQuery: ReportQuery }) {
   const report = await profitReport(kindQuery);
-  return (
-    <>
-      <h2>Profit · {report.window.label}</h2>
-      <div className="wrap"><table>
-        <thead><tr><th></th><th className="num">This period</th><th className="num">Prior period</th><th className="num">Year to date</th></tr></thead>
-        <tbody>
-          {report.rows.map((row) => (
-            <tr key={row.label}><td>{row.kind === "total" ? <strong>{row.label}</strong> : row.label}</td><td className="num">{usd(row.month)}</td><td className="num">{usd(row.prior)}</td><td className="num">{usd(row.ytd)}</td></tr>
-          ))}
-        </tbody>
-      </table></div>
-    </>
-  );
+  return <ProfitStatement rows={report.rows} from={report.window.from} to={report.window.to} priorFrom={report.window.priorFrom} />;
 }
 
 async function Balance() {
