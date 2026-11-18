@@ -8,6 +8,8 @@ import { NsfPage } from "./nsf/view";
 import { AuditPage } from "./audit/view";
 import { GuidePage } from "./guide/view";
 import { ImportPage } from "../import/view";
+import { ManualTab } from "./manual-tab";
+import { HelpRequestsTab } from "./help-tab";
 import { createApiKey, revokeApiKey } from "@/server/api-key-actions";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,8 @@ const TABS = [
   ["integrations", "Integrations"],
   ["audit", "Audit"],
   ["guide", "Guide"],
+  ["manual", "Manual"],
+  ["help", "Help requests"],
 ] as const;
 
 export default async function SettingsPage({
@@ -86,6 +90,8 @@ export default async function SettingsPage({
       )}
       {tab === "audit" && <AuditPage />}
       {tab === "guide" && <GuidePage />}
+      {tab === "manual" && <ManualTab searchParams={again} />}
+      {tab === "help" && <HelpRequestsTab searchParams={again} />}
     </Screen>
   );
 }

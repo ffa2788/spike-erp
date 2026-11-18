@@ -143,6 +143,39 @@ th, td { text-align: left; padding: 0.75rem 0.8rem; border-bottom: 1px solid var
 th { font-size: 0.85rem; letter-spacing: 0.03em; text-transform: uppercase; position: sticky; top: 0; background: white; }
 .num { text-align: right; font-weight: 750; font-variant-numeric: tabular-nums; font-size: 1.15rem; white-space: nowrap; }
 .cards .card strong { font-size: 2.1rem; font-variant-numeric: tabular-nums; }
+.topbar { display: flex; gap: 0.8rem; align-items: flex-end; margin-bottom: 1rem; }
+.topbar form { flex: 1; }
+.help-btn { position: relative; }
+.help-badge {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.45rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--alert);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.5rem;
+}
+.help-panel {
+  position: fixed;
+  top: 11rem;
+  right: 0.6rem;
+  width: min(520px, 100%);
+  height: calc(100vh - 11.6rem);
+  overflow: auto;
+  background: white;
+  border-left: 3px solid var(--blue-900);
+  z-index: 30;
+  padding: 1rem 1.1rem 2rem;
+  box-shadow: -8px 0 24px rgba(15, 43, 70, 0.15);
+}
+.help-hits { padding-left: 1.2rem; }
+.help-hits p { margin: 0.15rem 0 0.6rem; font-size: 0.9rem; }
+.manual section { scroll-margin-top: 1rem; }
 .screen-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.6rem 0 1rem; }
 .tabs a { padding: 0.45rem 0.75rem; border-radius: 10px; background: white; border: 2px solid var(--line); font-weight: 750; }
@@ -180,7 +213,7 @@ summary { cursor: pointer; font-weight: 750; min-height: 48px; }
   html { font-size: 18px; }
 }
 @media print {
-  .nav, .no-print, .banner.example, .tabs, .filters, .drawer-bar { display: none !important; }
+  .nav, .no-print, .banner.example, .tabs, .filters, .drawer-bar, .help-panel, .help-btn { display: none !important; }
   .app { display: block; }
   body, main, .paper { background: white; }
   main { max-width: none; padding: 0; }

@@ -48,7 +48,8 @@ export async function wipeDatabase() {
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
       "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast",
       "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "PayStub", "PayRun", "Employee", "PayrollTaxTable", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
-      "AuditLog", "LoginAttempt", "CompanyProfile", "User"
+      "AuditLog", "LoginAttempt", "CompanyProfile", "User",
+      "HelpRequest", "OperatingManual"
     RESTART IDENTITY CASCADE
   `);
 }

@@ -10,6 +10,15 @@ Scopes are `read`, `sales`, `purchasing`, `planning`, and `money`. A GET needs `
 
 Nothing is delivered until email is configured. A customer email is a draft until you confirm it.
 
+The operating manual says what the bot may do alone, what needs FFA, and what it must never do. Read it with `GET /api/v1/manual`. There is no call that changes the manual. Only the owner can edit it in Settings, Manual.
+
+Help requests from the Help button:
+
+- `GET /api/v1/help-requests?status=open`
+- `POST /api/v1/help-requests/{id}/answer` with `{ "answer": "..." }`
+
+The answer shows in that person's Help panel, with a badge on the Help button. Opening a request emails FFA, or logs the email if mail is not configured. Both calls are audit rows.
+
 ## Amazon reports
 
 - `POST /api/amazon/import` multipart fields `orders`, `payments`, `settlement`, and `fba`. Or one file with `kind` and `file`.
@@ -41,3 +50,6 @@ See `docs/AMAZON-SETUP.md` for the Seller Central files.
 - `POST /api/v1/messages` draft a quote or invoice email
 - `GET /api/v1/messages/{id}`
 - `POST /api/v1/messages/{id}/confirm` send it, or log it if mail is not configured
+- `GET /api/v1/manual` the operating manual, read only
+- `GET /api/v1/help-requests?status=open`
+- `POST /api/v1/help-requests/{id}/answer`

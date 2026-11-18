@@ -5,6 +5,9 @@ import { assessBooks, currentStock } from "./read-models";
 import { htmlToPdf } from "./html-to-pdf";
 import { deliverEmail, emailSetup } from "./email";
 import { documentHtml, money } from "./spike-documents";
+import { applyHelpAnswer } from "./help";
+import { botManualResult, parseManual } from "./manual";
+import { shippedManual } from "./manual-source";
 import { keysMatch, scopeAllows, type SpikeScope } from "./spike-auth";
 import { buildPlan } from "./services/mrp-run";
 import { buildSchedule, emailSchedule, releaseSchedule } from "./services/schedule-run";
@@ -55,8 +58,9 @@ export async function auditSpike(path: string, status: number, summary: string) 
 }
 
 function scopeFor(method: string, parts: string[]): SpikeScope {
-  if (method === "GET") return "read";
   const head = parts[0] ?? "";
+  if (head === "manual" || head === "help-requests") return "read";
+  if (method === "GET") return "read";
   if (head === "payments") return "money";
   if (head === "purchase-orders") return "purchasing";
   if (head === "production-plans") return "planning";
@@ -65,6 +69,9 @@ function scopeFor(method: string, parts: string[]): SpikeScope {
 
 async function route(method: string, parts: string[], query: Query, body: unknown): Promise<SpikeResult> {
   const [head, id, action] = parts;
+  if (head === "manual") return manualRoute(method);
+  if (method === "GET" && head === "help-requests" && !id) return listHelp(query.status ?? "open");
+  if (method === "POST" && head === "help-requests" && id && action === "answer") return answerHelp(id, body);
   if (method === "GET" && head === "search") return search(query.q ?? "");
   if (method === "GET" && head === "dashboard") return dashboard();
   if (method === "GET" && head === "customers" && !id) return listCustomers(query.q ?? "");
@@ -99,6 +106,68 @@ function asRecord(body: unknown): Record<string, unknown> {
 
 function text(body: Record<string, unknown>, key: string): string {
   return String(body[key] ?? "").trim();
+}
+
+async function manualRoute(method: string): Promise<SpikeResult> {
+  if (botManualResult(method) === "refuse") {
+    return { status: 405, body: { error: "The bot can read the manual. It cannot change it." } };
+  }
+  const saved = await prisma.operatingManual.findUnique({ where: { id: "manual" } });
+  const markdown = saved?.body || shippedManual();
+  const doc = parseManual(markdown);
+  return {
+    status: 200,
+    body: {
+      source: saved?.body ? "saved" : "shipped",
+      updatedBy: saved?.updatedBy ?? "",
+      markdown,
+      sections: doc.sections.map((section) => ({ id: section.id, title: section.title })),
+    },
+  };
+}
+
+async function listHelp(status: string): Promise<SpikeResult> {
+  const allowed = ["open", "answered", "closed"];
+  if (!allowed.includes(status)) return { status: 400, body: { error: "status must be open, answered, or closed." } };
+  const rows = await prisma.helpRequest.findMany({ where: { status }, orderBy: { createdAt: "desc" }, take: 50 });
+  return {
+    status: 200,
+    body: {
+      requests: rows.map((row) => ({
+        id: row.id,
+        user: row.userName,
+        screen: row.screen,
+        record: row.recordRef,
+        message: row.message,
+        status: row.status,
+        answer: row.answer,
+        createdAt: row.createdAt.toISOString(),
+        answeredAt: row.answeredAt?.toISOString() ?? null,
+      })),
+    },
+  };
+}
+
+async function answerHelp(id: string, body: unknown): Promise<SpikeResult> {
+  const answer = text(asRecord(body), "answer");
+  const row = await prisma.helpRequest.findUnique({ where: { id } });
+  if (!row) return { status: 404, body: { error: "Help request not found." } };
+  const check = applyHelpAnswer(row.status, answer);
+  if (!check.ok) return { status: 400, body: { error: check.error } };
+  const saved = await prisma.helpRequest.update({
+    where: { id },
+    data: { status: "answered", answer: answer.trim(), answeredBy: "SPIKE bot", answeredAt: new Date() },
+  });
+  await prisma.auditLog.create({
+    data: {
+      userName: "SPIKE bot",
+      action: "answer",
+      entity: "HelpRequest",
+      entityId: id,
+      summary: `SPIKE bot answered help request from ${row.userName}.`,
+    },
+  });
+  return { status: 200, body: { id: saved.id, status: saved.status, answer: saved.answer } };
 }
 
 async function listCustomers(q: string) {

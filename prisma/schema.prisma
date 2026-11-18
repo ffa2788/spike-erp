@@ -230,6 +230,33 @@ model CompanyProfile {
   trevorEmail       String     @default("")
 }
 
+model OperatingManual {
+  id        String   @id @default("manual")
+  body      String
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+}
+
+model HelpRequest {
+  id             String    @id @default(cuid())
+  userId         String
+  userName       String
+  screen         String
+  recordRef      String    @default("")
+  message        String
+  status         String    @default("open")
+  answer         String    @default("")
+  answeredBy     String    @default("")
+  screenshot     Bytes?
+  screenshotName String    @default("")
+  createdAt      DateTime  @default(now())
+  answeredAt     DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+}
+
 model ApiKey {
   id         String    @id @default(cuid())
   name       String
