@@ -15,6 +15,7 @@ export const CODES = {
   obe: "3900",
   sales: "4000",
   salesDiscount: "4100",
+  returns: "4050",
   otherIncome: "4200",
   cogs: "5000",
   ppv: "5100",
@@ -31,6 +32,9 @@ export const CODES = {
   adjustment: "6300",
   wages: "6400",
   employerTax: "6410",
+  rent: "6500",
+  utilities: "6510",
+  freight: "6520",
   payrollLiab: "2300",
 } as const;
 
@@ -53,6 +57,7 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.equity, name: "Owner's equity", type: "EQUITY" },
   { code: CODES.obe, name: "Opening balances", type: "EQUITY" },
   { code: CODES.sales, name: "Product sales", type: "INCOME" },
+  { code: CODES.returns, name: "Sales returns", type: "INCOME" },
   { code: CODES.salesDiscount, name: "Sales discounts", type: "INCOME" },
   { code: CODES.otherIncome, name: "Other income", type: "INCOME" },
   { code: CODES.cogs, name: "Cost of goods sold", type: "COGS" },
@@ -70,6 +75,9 @@ export const CHART: { code: string; name: string; type: AccountTypeName }[] = [
   { code: CODES.adjustment, name: "Inventory adjustments", type: "EXPENSE" },
   { code: CODES.wages, name: "Wages", type: "EXPENSE" },
   { code: CODES.employerTax, name: "Employer payroll taxes", type: "EXPENSE" },
+  { code: CODES.rent, name: "Rent", type: "EXPENSE" },
+  { code: CODES.utilities, name: "Utilities", type: "EXPENSE" },
+  { code: CODES.freight, name: "Freight", type: "EXPENSE" },
 ];
 
 export function inventoryAccount(kind: "RAW" | "FINISHED" | "UTILITY" | "PACKAGING"): string | null {

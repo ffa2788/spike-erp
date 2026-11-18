@@ -181,7 +181,7 @@ export async function importPaymentsFile(actor: Actor, text: string): Promise<Re
       feeCents,
       reimbursements,
     });
-  });
+  }, 180000);
 }
 
 function rowEffect(row: PaymentRow): number {

@@ -1,7 +1,7 @@
 import type { Channel } from "@prisma/client";
 import { addDays, toDateInput } from "../dates";
 import { CODES, inventoryAccount } from "../chart";
-import { fefoAllocate, lotQty, reliefCents, roundQty } from "../inventory";
+import { fefoAllocate, lotQty, reliefCents, roundQty, valueCents, type LotBalance } from "../inventory";
 import { cogsJournal, salesJournal, shipJournal, type DraftLine } from "../journals";
 import { shipBlockReason } from "../nsf";
 import { buyPriceProblem, sellBlockReason } from "../pricing";
@@ -20,7 +20,7 @@ import {
   type DiscountKindName,
   type IncotermName,
 } from "../commercial";
-import { audit, deny, loadBalances, nextNumber, postJournal, run, type Actor, type Tx } from "./shared";
+import { audit, deny, loadBalances, locationByCode, nextNumber, postJournal, run, type Actor, type Tx } from "./shared";
 
 type LineInput = {
   productId: string;
@@ -743,6 +743,76 @@ export async function payInvoice(
   });
 }
 
+export async function issueCreditMemo(
+  actor: Actor,
+  input: { invoiceId: string; amountCents: number; issuedOn: Date; reason: string; restockLotId?: string; restockQty?: number },
+): Promise<Result<{ invoiceId: string }>> {
+  const denied = deny(actor, "sell");
+  if (denied) return denied;
+  if (!input.reason.trim()) return err("Write why this credit is approved.");
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) return err("Enter a credit greater than zero.");
+  return run(async (tx) => {
+    const invoice = await tx.invoice.findUnique({ where: { id: input.invoiceId }, include: { party: true, lines: true } });
+    if (!invoice) return err("That invoice was not found.");
+    if (invoice.status === "VOID") return err("This invoice was voided. Credit the replacement instead.");
+    if (input.amountCents > invoice.balanceCents) return err("The credit is more than the open balance.");
+    const returns = await tx.account.findUnique({ where: { code: CODES.returns } });
+    if (!returns) return err("Account 4050 is not on the chart of accounts.");
+    const open = invoice.balanceCents - input.amountCents;
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: { balanceCents: open, status: open === 0 ? "PAID" : "PARTIAL", notes: `${invoice.notes}\nCredit memo: ${input.reason.trim()}`.trim() },
+    });
+    const journal = await postJournal(tx, actor, {
+      date: input.issuedOn,
+      memo: `Credit memo on ${invoice.number}. ${input.reason.trim()}`,
+      source: "CREDIT_MEMO",
+      sourceId: invoice.id,
+      lines: [
+        { accountCode: CODES.returns, debitCents: input.amountCents, creditCents: 0, memo: "Approved credit" },
+        { accountCode: CODES.ar, debitCents: 0, creditCents: input.amountCents, memo: `Credit on ${invoice.number}` },
+      ],
+      isExample: invoice.isExample,
+    });
+    if (!journal.ok) return journal;
+    if (input.restockLotId && (input.restockQty ?? 0) > 0) {
+      const lot = await tx.lot.findUnique({ where: { id: input.restockLotId }, include: { product: true } });
+      if (!lot) return err("That lot was not found.");
+      const account = inventoryAccount(lot.product.kind);
+      if (!account) return err(`${lot.product.name} is not stored in inventory.`);
+      const main = await locationByCode(tx, "MAIN");
+      const cents = valueCents(input.restockQty!, Number(lot.unitCost));
+      await tx.movement.create({
+        data: {
+          at: input.issuedOn,
+          lotId: lot.id,
+          productId: lot.productId,
+          locationId: main.id,
+          qty: input.restockQty!,
+          reason: "RETURN",
+          refType: "Invoice",
+          refId: invoice.id,
+          note: "Customer return",
+        },
+      });
+      const restored = await postJournal(tx, actor, {
+        date: input.issuedOn,
+        memo: `Return to stock on ${invoice.number}`,
+        source: "RETURN",
+        sourceId: invoice.id,
+        lines: [
+          { accountCode: account, debitCents: cents, creditCents: 0, memo: "Goods returned" },
+          { accountCode: CODES.cogs, debitCents: 0, creditCents: cents, memo: "Cost reversed" },
+        ],
+        isExample: invoice.isExample,
+      });
+      if (!restored.ok) return restored;
+    }
+    await audit(tx, actor, "credit", "Invoice", invoice.id, `Approved a credit memo of ${input.amountCents} cents on ${invoice.number}.`);
+    return ok({ invoiceId: invoice.id });
+  });
+}
+
 export async function createDirectOrder(
   actor: Actor,
   input: {
@@ -884,6 +954,36 @@ export async function postAmazonHistoryInvoice(
     });
     const subtotalCents = priced.reduce((sum, line) => sum + line.extended, 0);
     if (subtotalCents <= 0) return err(`Amazon order ${input.orderId} has no revenue to record.`);
+    const place = await locationByCode(tx, input.fulfillment === "FBM" ? "MAIN" : "AMAZON");
+    const asOf = toDateInput(input.date);
+    const stock = (await loadBalances(tx, [...new Set(priced.map((line) => line.productId))])).map((lot) => ({
+      ...lot,
+      locations: lot.locations.map((row) => ({ ...row })),
+    }));
+    const relieved: { productId: string; lotId: string; locationId: string; qty: number; cogsCents: number; account: string }[] = [];
+    const cogsByProduct = new Map<string, number>();
+    for (const line of priced) {
+      const product = await tx.product.findUnique({ where: { id: line.productId } });
+      if (!product) return err("That product was not found.");
+      const account = inventoryAccount(product.kind);
+      if (!account) return err(`${product.name} is not stored in inventory.`);
+      const narrowed = stock.map((lot) => ({
+        ...lot,
+        locations: lot.locations.filter((row) => row.locationId === place.id).map((row) => ({ ...row, shippable: true })),
+      }));
+      const allocation = fefoAllocate(narrowed, line.productId, line.qty, asOf);
+      if (!allocation.ok) return err(`Amazon order ${input.orderId}: ${product.name}: ${allocation.error}`);
+      for (const pick of allocation.picks) {
+        const lot = stock.find((item) => item.lotId === pick.lotId);
+        const bin = lot?.locations.find((row) => row.locationId === place.id);
+        if (!lot || !bin) return err("A lot changed while the Amazon invoice was being saved.");
+        const before = lotQty(lot);
+        bin.qty = roundQty(bin.qty - pick.qty);
+        const cogsCents = reliefCents(before, lotQty(lot), lot.unitCost);
+        cogsByProduct.set(line.productId, (cogsByProduct.get(line.productId) ?? 0) + cogsCents);
+        relieved.push({ productId: line.productId, lotId: pick.lotId, locationId: place.id, qty: pick.qty, cogsCents, account });
+      }
+    }
     const invoice = await tx.invoice.create({
       data: {
         number: await nextNumber(tx, invoiceSequenceName("AMAZON")),
@@ -900,7 +1000,8 @@ export async function postAmazonHistoryInvoice(
         fulfillment: input.fulfillment ?? "FBA",
         marketplaceOrderId: input.orderId,
         currency: "USD",
-        notes: `Amazon All Orders import. ${input.shipTo}. Amazon collected any sales tax. No lot was relieved.`,
+        notes: `Amazon All Orders import. ${input.shipTo}. Amazon collected any sales tax. Example data.`,
+        isExample: true,
         lines: {
           create: priced.map((line) => ({
             productId: line.productId,
@@ -908,19 +1009,62 @@ export async function postAmazonHistoryInvoice(
             qty: line.qty,
             unitPriceCents: line.unitPriceCents,
             taxable: false,
+            cogsCents: cogsByProduct.get(line.productId) ?? 0,
           })),
         },
       },
     });
+    for (const pick of relieved) {
+      await tx.movement.create({
+        data: {
+          at: input.date,
+          lotId: pick.lotId,
+          productId: pick.productId,
+          locationId: pick.locationId,
+          qty: -pick.qty,
+          reason: "SHIPMENT",
+          refType: "Invoice",
+          refId: invoice.id,
+          note: invoice.number,
+        },
+      });
+    }
+    const byAccount = new Map<string, number>();
+    for (const pick of relieved) byAccount.set(pick.account, (byAccount.get(pick.account) ?? 0) + pick.cogsCents);
+    const shipLines = shipJournal([...byAccount.entries()].map(([accountCode, cents]) => ({ accountCode, cents })));
+    if (shipLines.length) {
+      const shipped = await postJournal(tx, actor, {
+        date: input.date,
+        memo: `Amazon ship ${invoice.number}`,
+        source: "SHIPMENT",
+        sourceId: invoice.id,
+        lines: shipLines,
+        isExample: true,
+      });
+      if (!shipped.ok) return shipped;
+      const cogsLines = cogsJournal([...byAccount.values()].reduce((sum, cents) => sum + cents, 0));
+      const cogs = await postJournal(tx, actor, {
+        date: input.date,
+        memo: `Amazon cost ${invoice.number}`,
+        source: "COGS",
+        sourceId: invoice.id,
+        lines: cogsLines,
+        isExample: true,
+      });
+      if (!cogs.ok) return cogs;
+      await tx.invoice.update({ where: { id: invoice.id }, data: { cogsJournalId: cogs.value } });
+    }
     const journal = await postJournal(tx, actor, {
       date: input.date,
       memo: `Amazon ${input.orderId} ${invoice.number}`,
       source: "INVOICE",
       sourceId: invoice.id,
       lines: salesJournal({ subtotalCents, taxCents: 0, totalCents: subtotalCents }),
+      isExample: true,
     });
     if (!journal.ok) return journal;
     await tx.invoice.update({ where: { id: invoice.id }, data: { salesJournalId: journal.value } });
+    await audit(tx, actor, "invoice", "Invoice", invoice.id, `Created Amazon invoice ${invoice.number} for order ${input.orderId}.`);
     return ok({ invoiceId: invoice.id, number: invoice.number, created: true });
   });
 }

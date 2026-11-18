@@ -16,6 +16,7 @@ import { AmazonPage } from "./amazon/view";
 import { AmazonImportPage } from "./amazon/import/view";
 import { AmazonWeekPage } from "./amazon/week/view";
 import { WalmartPage } from "./walmart/view";
+import { OwnerReport } from "../reports/owner-view";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ const TABS = [
   ["amazon", "Amazon"],
   ["week", "Amazon week"],
   ["walmart", "Walmart"],
+  ["reports", "Reports"],
 ] as const;
 
 const FILTERS = [
@@ -161,6 +163,13 @@ export default async function SalesPage({
       {tab === "amazon" && <><AmazonPage searchParams={again} /><AmazonImportPage searchParams={again} /></>}
       {tab === "week" && <AmazonWeekPage searchParams={again} />}
       {tab === "walmart" && <WalmartPage searchParams={again} />}
+      {tab === "reports" && (
+        <OwnerReport
+          kind={one(sp, "id") || "sales"}
+          base="/sales"
+          query={{ period: one(sp, "period"), anchor: one(sp, "anchor"), from: one(sp, "from"), to: one(sp, "to"), sort: one(sp, "sort") }}
+        />
+      )}
     </Screen>
   );
 }

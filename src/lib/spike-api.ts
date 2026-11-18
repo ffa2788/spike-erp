@@ -6,6 +6,7 @@ import { htmlToPdf } from "./html-to-pdf";
 import { deliverEmail, emailSetup } from "./email";
 import { documentHtml, money } from "./spike-documents";
 import { loadBuySoon } from "./services/buy-soon";
+import { agingReport, balanceReport, customerReport, mrpReport, productReport, profitReport, salesReport } from "./services/owner-reports";
 import { applyHelpAnswer } from "./help";
 import { botManualResult, parseManual } from "./manual";
 import { shippedManual } from "./manual-source";
@@ -72,6 +73,7 @@ async function route(method: string, parts: string[], query: Query, body: unknow
   const [head, id, action] = parts;
   if (head === "manual") return manualRoute(method);
   if (method === "GET" && head === "alerts" && id === "low-stock") return lowStock();
+  if (method === "GET" && head === "reports" && id) return reportApi(id, query);
   if (method === "GET" && head === "help-requests" && !id) return listHelp(query.status ?? "open");
   if (method === "POST" && head === "help-requests" && id && action === "answer") return answerHelp(id, body);
   if (method === "GET" && head === "search") return search(query.q ?? "");
@@ -170,6 +172,18 @@ async function answerHelp(id: string, body: unknown): Promise<SpikeResult> {
     },
   });
   return { status: 200, body: { id: saved.id, status: saved.status, answer: saved.answer } };
+}
+
+async function reportApi(id: string, query: Query): Promise<SpikeResult> {
+  const ask = { period: query.period, anchor: query.anchor || "2026-10-15", from: query.from, to: query.to, sort: query.sort };
+  if (id === "sales") return { status: 200, body: await salesReport(ask) };
+  if (id === "products") return { status: 200, body: await productReport(ask) };
+  if (id === "customers") return { status: 200, body: await customerReport(ask) };
+  if (id === "mrp") return { status: 200, body: { rows: await mrpReport() } };
+  if (id === "profit") return { status: 200, body: await profitReport(ask) };
+  if (id === "balance") return { status: 200, body: await balanceReport(query.asOf || "2026-10-31") };
+  if (id === "ar") return { status: 200, body: await agingReport(query.asOf || "2026-11-18") };
+  return { status: 404, body: { error: "No such report. Use sales, products, customers, mrp, profit, balance, or ar." } };
 }
 
 async function lowStock(): Promise<SpikeResult> {

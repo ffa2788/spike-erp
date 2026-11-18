@@ -52,5 +52,6 @@ See `docs/AMAZON-SETUP.md` for the Seller Central files.
 - `POST /api/v1/messages/{id}/confirm` send it, or log it if mail is not configured
 - `GET /api/v1/manual` the operating manual, read only
 - `GET /api/v1/alerts/low-stock` items to buy soon, from the last eight weeks of use
+- `GET /api/v1/reports/sales?period=month&anchor=2026-10-15` and the same pattern for `products`, `customers`, `mrp`, `profit`, `balance`, and `ar`
 - `GET /api/v1/help-requests?status=open`
 - `POST /api/v1/help-requests/{id}/answer`

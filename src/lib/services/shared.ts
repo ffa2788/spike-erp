@@ -17,7 +17,7 @@ export function deny(actor: Actor, action: Action): Result<never> | null {
   return null;
 }
 
-export async function run<T>(work: (tx: Tx) => Promise<Result<T>>): Promise<Result<T>> {
+export async function run<T>(work: (tx: Tx) => Promise<Result<T>>, timeout = 20000): Promise<Result<T>> {
   try {
     return await prisma.$transaction(
       async (tx) => {
@@ -25,7 +25,7 @@ export async function run<T>(work: (tx: Tx) => Promise<Result<T>>): Promise<Resu
         if (!result.ok) throw new BusinessError(result.error);
         return result;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 20000 },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout },
     );
   } catch (error) {
     if (error instanceof BusinessError) return err(error.message);

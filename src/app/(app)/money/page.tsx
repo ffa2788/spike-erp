@@ -11,6 +11,7 @@ import { PayRunPage } from "../payroll/runs/[id]/view";
 import { TaxCenterPage } from "../tax/view";
 import { ReportsPage } from "../reports/view";
 import { ReportPage } from "../reports/[slug]/view";
+import { OwnerReport } from "../reports/owner-view";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +37,12 @@ export default async function MoneyPage({
   const books = await assessBooks();
   const entries = await prisma.journalEntry.findMany({ orderBy: { date: "desc" }, take: 30, include: { lines: true } });
   const primary = tab === "books" ? { href: "/money?tab=books&new=1", label: "New journal entry" } : undefined;
+  const ownerReport = ["sales", "products", "customers", "mrp", "profit", "balance", "ar"].includes(id);
   const drawer = tab === "books" && isNew
     ? <NewJournalPage searchParams={again} />
     : tab === "payroll" && id
       ? <PayRunPage params={Promise.resolve({ id })} searchParams={again} />
-      : tab === "reports" && id
+      : tab === "reports" && id && !ownerReport
         ? <ReportPage params={Promise.resolve({ slug: id })} searchParams={again} />
         : null;
   return (
@@ -87,7 +89,9 @@ export default async function MoneyPage({
       {tab === "payroll" && <PayrollPage searchParams={again} />}
       {tab === "tax" && <TaxCenterPage searchParams={again} />}
       {tab === "reports" && !id && <ReportsPage />}
-      {tab === "reports" && id ? null : null}
+      {tab === "reports" && ownerReport && (
+        <OwnerReport kind={id} base="/money" query={{ period: one(sp, "period"), anchor: one(sp, "anchor"), from: one(sp, "from"), to: one(sp, "to"), sort: one(sp, "sort") }} />
+      )}
     </Screen>
   );
 }
