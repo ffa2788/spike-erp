@@ -77,6 +77,7 @@ export default async function SettingsPage({
             <input type="hidden" name="purchasing" value="yes" />
             <input type="hidden" name="planning" value="yes" />
             <input type="hidden" name="money" value="yes" />
+            <input type="hidden" name="import" value="yes" />
             <button className="btn" type="submit">Create a key</button>
           </form>
           <ul>

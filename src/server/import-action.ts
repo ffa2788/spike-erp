@@ -6,7 +6,9 @@ import { validateAmazonOrders } from "@/lib/amazon";
 import { detectGolive, validateBoms, validateFormulas, validateOpenAp, validateOpenAr, validateStock, validateTrial, type GoliveExisting } from "@/lib/golive";
 import { detectKind, validateAccounts, validateCustomers, validateItems, validateJournal } from "@/lib/peachtree";
 import { commitGolive } from "@/lib/services/golive-import";
+import { commitBundle, describeBundle, filesFromForm, textOfUpload } from "@/lib/services/import-bundle";
 import { commitMarketplace, commitPeachtree } from "@/lib/services/importers";
+import type { TieCheck } from "@/lib/import-bundle";
 import { requireCan } from "./actor";
 
 export type PeachtreeState = {
@@ -125,4 +127,41 @@ export async function peachtreeAction(_prev: PeachtreeState, formData: FormData)
     skipped: rows.length - ready,
     rows: rows.map((row) => ({ rowNumber: row.rowNumber, status: row.status, summary: row.summary, messages: row.messages })),
   };
+}
+
+export type BundleState = {
+  error?: string;
+  notice?: string;
+  okRows: number;
+  files: { name: string; kind: string; detected: string; csv: string; ready: number }[];
+  errors: { file: string; rowNumber: number; summary: string; messages: string[] }[];
+  checks: TieCheck[];
+};
+
+async function uploads(formData: FormData) {
+  const listed = filesFromForm(formData);
+  if (listed.length) return listed;
+  const files = formData.getAll("files").filter((item): item is File => item instanceof File && item.size > 0);
+  return Promise.all(files.map(async (file) => ({ name: file.name, csv: await textOfUpload(file), kind: "" })));
+}
+
+export async function previewBundleAction(formData: FormData): Promise<BundleState> {
+  await requireCan("importData");
+  const files = await uploads(formData);
+  if (!files.length) return { error: "Drop at least one file.", okRows: 0, files: [], errors: [], checks: [] };
+  const preview = await describeBundle(files);
+  return {
+    okRows: preview.okRows,
+    files: preview.files.map((file) => ({ name: file.name, kind: file.kind, detected: file.detected, csv: file.csv, ready: file.ready })),
+    errors: preview.errorRows.map((row) => ({ file: row.file, rowNumber: row.rowNumber, summary: row.summary, messages: row.messages })),
+    checks: preview.checks,
+  };
+}
+
+export async function commitBundleAction(formData: FormData): Promise<BundleState> {
+  const actor = await requireCan("importData");
+  const files = filesFromForm(formData);
+  const result = await commitBundle(actor, files);
+  if (!result.ok) return { error: result.error, okRows: 0, files: [], errors: [], checks: [] };
+  return { notice: result.value.notes.join(" "), okRows: result.value.saved, files: [], errors: [], checks: [] };
 }

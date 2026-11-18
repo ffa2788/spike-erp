@@ -52,6 +52,7 @@ export function HelpPanel({
             <button className="btn secondary" type="button" onClick={() => setOpen(false)}>Close</button>
           </div>
           <h2>Help</h2>
+          <p className="muted">On Import, drop every Peachtree file at once. SPIKE detects each one and posts them in cutover order. The bot can do the same with POST /api/v1/imports.</p>
           <p className="muted">
             {twoFactor
               ? "Sign-in asks for an authenticator code after the password because REQUIRE_2FA is true."
