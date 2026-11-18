@@ -9,13 +9,16 @@ export async function middleware(request: NextRequest) {
   const session = await readToken(request.cookies.get("spike_session")?.value);
   if (OPEN.some((item) => path === item)) {
     if (session && path === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(new URL(session.mustChange ? "/account" : "/", request.url));
     }
     return NextResponse.next();
   }
   if (!session) {
     const login = new URL("/login", request.url);
     return NextResponse.redirect(login);
+  }
+  if (session.mustChange && path !== "/account") {
+    return NextResponse.redirect(new URL("/account", request.url));
   }
   const sent = sendToScreen(request);
   if (sent) return sent;

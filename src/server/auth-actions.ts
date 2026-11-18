@@ -70,7 +70,7 @@ export async function verifyCode(formData: FormData) {
   }
   const delta = totpFor(found.user.email, found.user.totpSecret).validate({ token: code, window: 1 });
   if (delta === null) fail("/login/code", "That code is not right.");
-  await startSession(found.user.id, found.user.email, found.user.name, found.user.role);
+  await startSession(found.user.id);
 }
 
 export async function enroll(formData: FormData) {
@@ -86,7 +86,7 @@ export async function enroll(formData: FormData) {
   const delta = totpFor(found.user.email, secret).validate({ token: code, window: 1 });
   if (delta === null) fail("/login/enroll", "That code is not right. Check the clock on the phone and try again.");
   await prisma.user.update({ where: { id: found.user.id }, data: { totpEnabled: true, totpSecret: secret } });
-  await startSession(found.user.id, found.user.email, found.user.name, found.user.role);
+  await startSession(found.user.id);
 }
 
 export async function enrollmentQr(): Promise<{ secret: string; qr: string } | null> {
@@ -102,11 +102,25 @@ export async function enrollmentQr(): Promise<{ secret: string; qr: string } | n
   return { secret, qr };
 }
 
-async function startSession(id: string, email: string, name: string, role: string) {
+export async function setSessionCookie(user: { id: string; email: string; name: string; role: string; sessionVersion: number; mustChangePassword: boolean }) {
   const jar = await cookies();
-  const token = await signToken({ id, email, name, role }, "12h");
+  const token = await signToken({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    sv: user.sessionVersion,
+    mustChange: user.mustChangePassword,
+  }, "12h");
   jar.set("spike_session", token, { ...cookieBase, maxAge: 60 * 60 * 12 });
   jar.delete("spike_pending");
+}
+
+async function startSession(id: string) {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user?.active) fail("/login", "That email or password is not right.");
+  await setSessionCookie(user);
+  if (user.mustChangePassword) succeed("/account", "Choose a new password to continue.");
   succeed("/", "You are signed in.");
 }
 

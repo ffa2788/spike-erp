@@ -243,6 +243,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .search-box kbd { color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.75rem; background: #f8fafc; }
 .top-actions { display: flex; align-items: center; gap: 0.45rem; }
 .who { display: flex; align-items: center; gap: 0.45rem; padding-right: 0.25rem; }
+.who-link { display: flex; align-items: center; gap: 0.45rem; color: inherit; text-decoration: none; }
 .who-name { font-weight: 600; font-size: 0.9rem; }
 .avatar {
   width: 32px;

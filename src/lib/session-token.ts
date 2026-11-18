@@ -6,6 +6,8 @@ export type TokenPayload = {
   name: string;
   role: string;
   purpose?: string;
+  sv?: number;
+  mustChange?: boolean;
 };
 
 function key() {
@@ -36,6 +38,8 @@ export async function readToken(token: string | undefined | null): Promise<Token
       name: typeof payload.name === "string" ? payload.name : "",
       role: typeof payload.role === "string" ? payload.role : "",
       purpose: typeof payload.purpose === "string" ? payload.purpose : undefined,
+      sv: typeof payload.sv === "number" ? payload.sv : undefined,
+      mustChange: payload.mustChange === true,
     };
   } catch {
     return null;

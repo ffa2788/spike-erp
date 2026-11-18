@@ -578,7 +578,7 @@ export async function userAction(formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) fail("/settings/users", "That email is already in use.");
   await prisma.user.create({
-    data: { email, name, role: role as "OWNER", passwordHash: await bcrypt.hash(password, 10), totpEnabled: false },
+    data: { email, name, role: role as "OWNER", passwordHash: await bcrypt.hash(password, 10), totpEnabled: false, mustChangePassword: true },
   });
   const { audit } = await import("@/lib/services/shared");
   await prisma.$transaction(async (tx) => {

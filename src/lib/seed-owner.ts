@@ -23,7 +23,7 @@ export function generatePassword(): string {
 
 export function initialPassword(env: NodeJS.ProcessEnv, random: () => string = generatePassword): { password: string; generated: boolean } {
   const given = (env.OWNER_PASSWORD ?? "").trim();
-  if (given && given.length < 12) throw new Error("OWNER_PASSWORD must be at least 12 characters.");
+  if (given && given.length < 8) throw new Error("OWNER_PASSWORD must be at least 8 characters.");
   if (given) return { password: given, generated: false };
   return { password: random(), generated: true };
 }

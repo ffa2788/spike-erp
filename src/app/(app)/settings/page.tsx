@@ -11,10 +11,12 @@ import { ImportPage } from "../import/view";
 import { ManualTab } from "./manual-tab";
 import { HelpRequestsTab } from "./help-tab";
 import { createApiKey, revokeApiKey } from "@/server/api-key-actions";
+import AccountPage from "../account/page";
 
 export const dynamic = "force-dynamic";
 
 const TABS = [
+  ["account", "My account"],
   ["company", "Company"],
   ["users", "Users"],
   ["tax", "Tax rates"],
@@ -47,6 +49,7 @@ export default async function SettingsPage({
       active={tab}
       tabs={TABS.map(([tabId, label]) => ({ id: tabId, label, href: `/settings?tab=${tabId}` }))}
     >
+      {tab === "account" && <AccountPage searchParams={again} />}
       {tab === "company" && (
         <>
           <Flash error={query.error} notice={query.notice} />

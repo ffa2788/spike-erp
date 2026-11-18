@@ -27,7 +27,7 @@ Set these on the Vercel project for the **Production** environment. Leave Previe
 | `AUTH_SECRET` | Required | Signs the session cookie. At least 32 characters. The app refuses to sign a session when it is missing or shorter than 16 characters. | `openssl rand -base64 32` |
 | `OWNER_EMAIL` | Required for the first seed only. The running app does not read it. | Email of the owner login created by `npm run seed`. | `frank@sperchemical.com` |
 | `OWNER_NAME` | Optional | Name stored on that login. Defaults to `FFA`. | `FFA` |
-| `OWNER_PASSWORD` | Optional. Do not set this on Vercel. | When set, and at least 12 characters, the seed uses it and does not write a file. When unset, the seed generates a password. | Leave unset. Use the generated file. |
+| `OWNER_PASSWORD` | Optional. Do not set this on Vercel. | When set, and at least 8 characters, the seed uses it and does not write a file. When unset, the seed generates a password. | Leave unset. Use the generated file. |
 | `OWNER_PASSWORD_FILE` | Optional. Do not set this on Vercel. | Path for a generated password. Default `owner-initial-password.txt` in the directory where you ran the seed. | `owner-initial-password.txt` |
 | `COMPANY_LEGAL_NAME` | Optional | Legal name on the blank company profile. Defaults to `SPER Chemical Corporation`. | `SPER Chemical Corporation` |
 | `COMPANY_ADDRESS` | Optional | Street on that profile. Blank until you set the real street. | |

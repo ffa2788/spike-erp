@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { sessionMatches } from "@/lib/password";
 import { can, type Action, type RoleName } from "@/lib/permissions";
 import { readToken } from "@/lib/session-token";
 import type { Actor } from "@/lib/services/shared";
@@ -12,7 +13,9 @@ export async function getActor(): Promise<CurrentUser | null> {
   const session = await readToken(jar.get("spike_session")?.value);
   if (!session) return null;
   const user = await prisma.user.findUnique({ where: { id: session.id } });
-  if (!user?.active) return null;
+  if (!user?.active || !sessionMatches(session.sv, user.sessionVersion)) {
+    redirect("/api/session/end");
+  }
   return { id: user.id, email: user.email, name: user.name, role: user.role };
 }
 
