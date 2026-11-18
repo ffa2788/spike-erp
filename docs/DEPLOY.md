@@ -25,6 +25,7 @@ Set these on the Vercel project for the **Production** environment. Leave Previe
 | `DATABASE_URL` | Required | Neon pooled connection string. The running app uses this. | `postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require` |
 | `DIRECT_URL` | Required | Neon direct connection string. Migrations use this. Same user and password, host without `-pooler`. Locally, set it to the same value as `DATABASE_URL`. | `postgresql://USER:PASSWORD@ep-xxxx.REGION.aws.neon.tech/neondb?sslmode=require` |
 | `AUTH_SECRET` | Required | Signs the session cookie. At least 32 characters. The app refuses to sign a session when it is missing or shorter than 16 characters. | `openssl rand -base64 32` |
+| `REQUIRE_2FA` | Optional | Authenticator step after the password. Only the exact value `true` turns it on. Unset, `false`, or anything else means email and password only. Eight wrong passwords in 15 minutes still lock the account. A temporary password still sends the person to My account. | Leave unset |
 | `OWNER_EMAIL` | Required for the first seed only. The running app does not read it. | Email of the owner login created by `npm run seed`. | `frank@sperchemical.com` |
 | `OWNER_NAME` | Optional | Name stored on that login. Defaults to `FFA`. | `FFA` |
 | `OWNER_PASSWORD` | Optional. Do not set this on Vercel. | When set, and at least 8 characters, the seed uses it and does not write a file. When unset, the seed generates a password. | Leave unset. Use the generated file. |
@@ -102,14 +103,14 @@ npm run seed
 
 What that creates:
 
-- One user, role Owner, authenticator not set up yet.
+- One user, role Owner. The authenticator fields are left empty. Sign-in does not ask for a code unless `REQUIRE_2FA` is `true`.
 - A blank company profile with the example banner off.
 - The chart of accounts, locations, and number sequences, marked as real rather than example.
 - No customers, products, lots, invoices, or payments.
 
 When `OWNER_PASSWORD` is unset, the password is written to `owner-initial-password.txt` in the current directory (mode `0600`). The command prints the file path and does not print the password. Put the password in a password manager, then delete the file. It is listed in `.gitignore`. A second run does nothing if any user already exists.
 
-Sign in at `https://erp.sperchemical.com/login` with that email and password. SPIKE then shows a QR code so the owner can enroll an authenticator. The session is not finished until that code is confirmed.
+Sign in at `https://erp.sperchemical.com/login` with that email and password. With `REQUIRE_2FA` unset, that finishes the sign-in. If the password was temporary, SPIKE opens My account so they can choose a new one. Set `REQUIRE_2FA` to `true` when you want the authenticator code, and the QR enrollment, after the password.
 
 ## 6. Example data
 
