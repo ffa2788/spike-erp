@@ -3,7 +3,7 @@ import { Flash, readQuery } from "@/components/ui";
 import { DrawerClose, Screen, one } from "@/components/screen";
 import { prisma } from "@/lib/db";
 import { todayInput } from "@/lib/dates";
-import { formatQty, usd } from "@/lib/format";
+import { formatDate, formatQty, usd } from "@/lib/format";
 import { lotQty, stockBuckets, valueCents } from "@/lib/inventory";
 import { currentStock } from "@/lib/read-models";
 import { QC_LABEL } from "@/lib/labels";
@@ -14,6 +14,8 @@ import { SchedulePage } from "../planning/schedule/view";
 import { ProductionPage } from "../production/view";
 import { NewBatchPage } from "../production/new/view";
 import { BatchPage } from "../production/[id]/view";
+import { loadBuySoon } from "@/lib/services/buy-soon";
+import { createBuyPo, saveWeeklyUse } from "@/server/buy-soon-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ const TABS = [
   ["planning", "Materials plan"],
   ["schedule", "Production plan"],
   ["production", "Batches"],
+  ["low", "Low stock"],
 ] as const;
 
 export default async function InventoryPage({
@@ -108,6 +111,47 @@ export default async function InventoryPage({
       {tab === "planning" && <PlanningPage searchParams={again} />}
       {tab === "schedule" && <SchedulePage searchParams={again} />}
       {tab === "production" && <ProductionPage searchParams={again} />}
+      {tab === "low" && <LowStock />}
     </Screen>
+  );
+}
+
+async function LowStock() {
+  const rows = (await loadBuySoon()).filter((row) => row.tone !== "ok");
+  return (
+    <>
+      <p className="lede">Cover is on hand plus what is already on order, divided by the average week from the last eight weeks. Red runs out before a purchase order could arrive.</p>
+      {rows.length === 0 ? <div className="empty"><p>Nothing needs a purchase order from the last eight weeks of use.</p></div> : (
+        <div className="wrap"><table>
+          <thead>
+            <tr><th>Item</th><th className="num">On hand</th><th className="num">A week</th><th className="num">Weeks left</th><th>Runs out</th><th className="num">Buy</th><th></th></tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.productId}>
+                <td>{row.sku}<br />{row.name}</td>
+                <td className="num">{row.onHand} {row.unit}</td>
+                <td className="num">{row.weeklyUse}</td>
+                <td className="num">{row.weeksLeft ?? "—"}</td>
+                <td><span className={`chip ${row.tone === "red" ? "bad" : "warn"}`}>{row.runOut ? formatDate(row.runOut) : "—"}</span></td>
+                <td className="num">{row.suggestedQty}</td>
+                <td>
+                  <form action={createBuyPo}>
+                    <input type="hidden" name="productId" value={row.productId} />
+                    <input type="hidden" name="qty" value={row.suggestedQty} />
+                    <button className="btn" type="submit">Create PO</button>
+                  </form>
+                  <form action={saveWeeklyUse} className="row">
+                    <input type="hidden" name="productId" value={row.productId} />
+                    <input name="weekly" placeholder="Weekly use" inputMode="decimal" />
+                    <button className="btn secondary" type="submit">Save</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+    </>
   );
 }

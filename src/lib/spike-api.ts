@@ -5,6 +5,7 @@ import { assessBooks, currentStock } from "./read-models";
 import { htmlToPdf } from "./html-to-pdf";
 import { deliverEmail, emailSetup } from "./email";
 import { documentHtml, money } from "./spike-documents";
+import { loadBuySoon } from "./services/buy-soon";
 import { applyHelpAnswer } from "./help";
 import { botManualResult, parseManual } from "./manual";
 import { shippedManual } from "./manual-source";
@@ -59,7 +60,7 @@ export async function auditSpike(path: string, status: number, summary: string) 
 
 function scopeFor(method: string, parts: string[]): SpikeScope {
   const head = parts[0] ?? "";
-  if (head === "manual" || head === "help-requests") return "read";
+  if (head === "manual" || head === "help-requests" || head === "alerts") return "read";
   if (method === "GET") return "read";
   if (head === "payments") return "money";
   if (head === "purchase-orders") return "purchasing";
@@ -70,6 +71,7 @@ function scopeFor(method: string, parts: string[]): SpikeScope {
 async function route(method: string, parts: string[], query: Query, body: unknown): Promise<SpikeResult> {
   const [head, id, action] = parts;
   if (head === "manual") return manualRoute(method);
+  if (method === "GET" && head === "alerts" && id === "low-stock") return lowStock();
   if (method === "GET" && head === "help-requests" && !id) return listHelp(query.status ?? "open");
   if (method === "POST" && head === "help-requests" && id && action === "answer") return answerHelp(id, body);
   if (method === "GET" && head === "search") return search(query.q ?? "");
@@ -168,6 +170,26 @@ async function answerHelp(id: string, body: unknown): Promise<SpikeResult> {
     },
   });
   return { status: 200, body: { id: saved.id, status: saved.status, answer: saved.answer } };
+}
+
+async function lowStock(): Promise<SpikeResult> {
+  const rows = await loadBuySoon();
+  return {
+    status: 200,
+    body: {
+      alerts: rows.filter((row) => row.tone !== "ok").map((row) => ({
+        sku: row.sku,
+        name: row.name,
+        tone: row.tone,
+        onHand: row.onHand,
+        unit: row.unit,
+        weeklyUse: row.weeklyUse,
+        weeksLeft: row.weeksLeft,
+        runOut: row.runOut,
+        suggestedQty: row.suggestedQty,
+      })),
+    },
+  };
 }
 
 async function listCustomers(q: string) {

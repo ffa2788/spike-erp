@@ -10,6 +10,7 @@ import { reorderSuggestion } from "@/lib/planning";
 import { buildPlan } from "@/lib/services/mrp-run";
 import { assessBooks, currentStock } from "@/lib/read-models";
 import { executiveDashboard } from "@/lib/dashboard";
+import { loadBuySoon } from "@/lib/services/buy-soon";
 import { bankPosition } from "@/lib/services/money";
 import { readQuery } from "@/components/ui";
 
@@ -42,7 +43,8 @@ export default async function HomePage({
     prisma.party.findMany({ where: { taxExempt: true, exemptionExpires: { not: null } } }),
     prisma.auditLog.findMany({ orderBy: { at: "desc" }, take: 8 }),
   ]);
-  const materialPlan = await buildPlan(today);
+  const [materialPlan, buySoon] = await Promise.all([buildPlan(today), loadBuySoon(today)]);
+  const buying = buySoon.filter((row) => row.tone !== "ok").slice(0, 6);
   const critical = materialPlan.coverage.filter((row) => row.status === "CRITICAL").length;
   const low = materialPlan.coverage.filter((row) => row.status === "LOW").length;
   const belowReorder = products.filter((product) => {
@@ -184,6 +186,21 @@ export default async function HomePage({
         <Link className="card" href="/inventory?tab=coverage"><span>Low stock</span><strong>{dash.belowReorder}</strong><p className="muted">{dash.criticalCoverage} critical, {dash.lowCoverage} low on coverage.</p></Link>
         <Link className="card" href="/sales?tab=orders"><span>Open orders</span><strong>{dash.ordersToShip}</strong><p className="muted">{dash.uninvoicedDeliveries} shipment{dash.uninvoicedDeliveries === 1 ? "" : "s"} not invoiced yet.</p></Link>
       </div>
+      <section className="buy-soon">
+        <h2>Buy soon</h2>
+        {buying.length === 0 ? <p className="muted">Nothing is on pace to run out before a purchase order could arrive.</p> : (
+          <div className="attention">
+            {buying.map((row) => (
+              <Link key={row.productId} href="/inventory?tab=low">
+                <article className={`card ${row.tone === "red" ? "bad" : "warn"}`}>
+                  <strong>{row.sku}</strong>
+                  <span>{row.tone === "red" ? "Runs out before a PO could arrive." : "Order this week."} {row.onHand} {row.unit} on hand, about {row.weeklyUse} a week, {row.weeksLeft ?? "—"} weeks left.</span>
+                </article>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
       <div className="home-split">
         <section>
           <h2>Needs attention</h2>

@@ -359,6 +359,8 @@ model Product {
   preferredVendorId String?
   preferredVendor   Party?      @relation("PreferredVendor", fields: [preferredVendorId], references: [id])
   leadTimeDays      Int?
+  safetyWeeks       Int         @default(2)
+  weeklyUseOverride Decimal?    @db.Decimal(18, 4)
   nsfCertified      Boolean     @default(false)
   nsfCertNumber     String      @default("")
   nsfBody           String      @default("")

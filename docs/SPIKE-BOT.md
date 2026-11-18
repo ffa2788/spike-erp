@@ -51,5 +51,6 @@ See `docs/AMAZON-SETUP.md` for the Seller Central files.
 - `GET /api/v1/messages/{id}`
 - `POST /api/v1/messages/{id}/confirm` send it, or log it if mail is not configured
 - `GET /api/v1/manual` the operating manual, read only
+- `GET /api/v1/alerts/low-stock` items to buy soon, from the last eight weeks of use
 - `GET /api/v1/help-requests?status=open`
 - `POST /api/v1/help-requests/{id}/answer`

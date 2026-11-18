@@ -1,6 +1,7 @@
 import { channelOf, independentDemand, runMrp, type ChannelCode, type DatedQty, type MrpItem } from "../mrp";
 import { coverItem, type CoverStatus } from "../coverage";
 import { stockAlerts } from "../alerts";
+import { notifyBuySoon } from "./buy-soon";
 import { deliverEmail, emailSetup } from "../email";
 import { PACKAGE_PRESETS, contentsWeightLb, qtyPerUnit, type PackBasisName } from "../formula-math";
 import { stockBuckets } from "../inventory";
@@ -238,6 +239,7 @@ export async function dispatchStockAlerts(asOf = toDateInput(new Date())) {
       emailedOn: row.emailedOn ? toDateInput(row.emailedOn) : null,
     })),
   });
+  await notifyBuySoon(asOf);
   if (!setup.configured) {
     return { configured: false as const, missing: setup.missing, pending: decision.messages.length, coverage: built.coverage };
   }

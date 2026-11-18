@@ -36,6 +36,7 @@ export const openApi = {
     "/messages/{id}": { get: { summary: "Read a draft" } },
     "/messages/{id}/confirm": { post: { summary: "Send the draft. Logged, not delivered, until email is configured." } },
     "/manual": { get: { summary: "Read the operating manual. The bot cannot change it." } },
+    "/alerts/low-stock": { get: { summary: "Items that will run out before a purchase order can arrive, and items to order this week." } },
     "/help-requests": { get: { summary: "List help requests", parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["open", "answered", "closed"] } }] } },
     "/help-requests/{id}/answer": { post: { summary: "Answer a help request. The answer shows on that person's Help button." } },
   },
