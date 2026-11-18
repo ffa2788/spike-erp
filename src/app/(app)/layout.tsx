@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { HelpPanel } from "@/components/help-panel";
+import { BrandMark } from "@/components/brand-mark";
 import { SearchBox } from "@/components/search-box";
 import { SideNav } from "@/components/shell";
 import { logout } from "@/server/auth-actions";
@@ -29,11 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="app">
       <aside className="nav">
         <div className="brand">
-          <img src="/brand/logo.png" alt="SPER Chemical Corporation" />
-          <div>
-            <strong>SPIKE</strong>
-            <span>Sales, planning, inventory</span>
-          </div>
+          <BrandMark />
         </div>
         <SideNav />
       </aside>
