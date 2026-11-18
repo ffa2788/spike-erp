@@ -585,5 +585,5 @@ export async function userAction(formData: FormData) {
     await audit(tx, actor, "create", "User", email, `Added user ${name} as ${role}.`);
   });
   const { succeed } = await import("./http");
-  succeed("/settings/users", "User added. They will set up their sign-in code on first login.");
+  succeed("/settings/users", "User added. They choose a new password at the first sign-in.");
 }

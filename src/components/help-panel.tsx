@@ -20,10 +20,12 @@ export function HelpPanel({
   sections,
   requests,
   badge,
+  twoFactor = false,
 }: {
   sections: ManualSection[];
   requests: HelpRow[];
   badge: number;
+  twoFactor?: boolean;
 }) {
   const pathname = usePathname() || "/";
   const params = useSearchParams();
@@ -50,6 +52,11 @@ export function HelpPanel({
             <button className="btn secondary" type="button" onClick={() => setOpen(false)}>Close</button>
           </div>
           <h2>Help</h2>
+          <p className="muted">
+            {twoFactor
+              ? "Sign-in asks for an authenticator code after the password because REQUIRE_2FA is true."
+              : "Sign-in is email and password. Set REQUIRE_2FA to true to ask for an authenticator code as well."}
+          </p>
           {answered.length > 0 && (
             <div className="banner good">
               {answered.map((row) => (

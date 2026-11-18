@@ -6,6 +6,7 @@ import { Secret, TOTP } from "otpauth";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/db";
 import { isLocked, LOCKOUT_WINDOW_MS } from "@/lib/lockout";
+import { twoFactorRequired } from "@/lib/two-factor";
 import { signToken } from "@/lib/session-token";
 import { fail, succeed } from "./http";
 import { readToken } from "@/lib/session-token";
@@ -52,6 +53,7 @@ export async function login(formData: FormData) {
   const match = user ? await bcrypt.compare(password, user.passwordHash) : false;
   await prisma.loginAttempt.create({ data: { email, success: Boolean(match && user?.active) } });
   if (!user || !match || !user.active) fail("/login", "That email or password is not right.");
+  if (!twoFactorRequired()) await startSession(user.id);
   const jar = await cookies();
   const token = await signToken(
     { id: user.id, email: user.email, name: user.name, role: user.role, purpose: user.totpEnabled ? "2fa" : "enroll" },
@@ -90,6 +92,7 @@ export async function enroll(formData: FormData) {
 }
 
 export async function enrollmentQr(): Promise<{ secret: string; qr: string } | null> {
+  if (!twoFactorRequired()) return null;
   const found = await pendingUser();
   if (!found || found.pending.purpose !== "enroll") return null;
   let secret = found.user.totpSecret;

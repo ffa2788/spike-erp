@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { Flash } from "@/components/ui";
+import { twoFactorRequired } from "@/lib/two-factor";
 import { verifyCode } from "@/server/auth-actions";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +10,7 @@ export default async function CodePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  if (!twoFactorRequired()) redirect("/login");
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : "";
   return (

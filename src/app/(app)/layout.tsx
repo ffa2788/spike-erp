@@ -10,6 +10,7 @@ import { ROLE_LABEL } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { parseManual } from "@/lib/manual";
 import { shippedManual } from "@/lib/manual-source";
+import { twoFactorRequired } from "@/lib/two-factor";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <HelpPanel
                 sections={sections}
                 badge={badge}
+                twoFactor={twoFactorRequired()}
                 requests={requests.map((row) => ({
                   id: row.id,
                   screen: row.screen,
