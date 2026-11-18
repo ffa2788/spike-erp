@@ -1,0 +1,1319 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OWNER
+  PARTNER
+  WAREHOUSE
+  READONLY
+}
+
+enum ProductKind {
+  RAW
+  FINISHED
+  UTILITY
+  PACKAGING
+}
+
+enum ProductForm {
+  LIQUID
+  POWDER
+  OTHER
+}
+
+enum DocKind {
+  TDS
+  SDS
+}
+
+enum DocStatus {
+  DRAFT
+  REVIEWED
+  PUBLISHED
+}
+
+enum PackBasis {
+  UNIT
+  CASE
+  PALLET
+}
+
+enum EntityType {
+  C_CORP
+  S_CORP
+}
+
+enum InfoReturn {
+  NONE
+  NEC
+  MISC
+}
+
+enum PriceStatus {
+  UNSET
+  PLACEHOLDER
+  CONFIRMED
+}
+
+enum QcStatus {
+  QUARANTINE
+  APPROVED
+  REJECTED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PARTLY_SHIPPED
+  SHIPPED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  OPEN
+  PARTIAL
+  PAID
+  VOID
+}
+
+enum PoStatus {
+  DRAFT
+  SENT
+  PARTLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum BillStatus {
+  OPEN
+  PARTIAL
+  PAID
+}
+
+enum BatchStatus {
+  PLANNED
+  IN_PROCESS
+  CLOSED
+}
+
+enum Channel {
+  DIRECT
+  DISTRIBUTOR
+  MUNICIPAL
+  AMAZON
+  WALMART
+  EXPORT
+}
+
+enum ProductPath {
+  RESALE
+  REPACK
+  MANUFACTURED
+}
+
+enum FulfillmentPlace {
+  WAREHOUSE
+  FBA
+  FBM
+}
+
+enum PayType {
+  HOURLY
+  SALARY
+}
+
+enum PayRunStatus {
+  DRAFT
+  POSTED
+}
+
+enum Incoterm {
+  EXW
+  FCA
+  FOB
+  CFR
+  CIF
+  CPT
+  CIP
+  DAP
+  DPU
+  DDP
+}
+
+enum CreditTerm {
+  PREPAID
+  COD
+  NET_15
+  NET_30
+  NET_45
+  NET_60
+  CUSTOM
+}
+
+enum DiscountKind {
+  NONE
+  PERCENT
+  AMOUNT
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  COGS
+  EXPENSE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role
+  totpSecret   String?
+  totpEnabled  Boolean  @default(false)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model LoginAttempt {
+  id      String   @id @default(cuid())
+  email   String
+  at      DateTime @default(now())
+  success Boolean
+
+  @@index([email, at])
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  at       DateTime @default(now())
+  userId   String?
+  userName String
+  action   String
+  entity   String
+  entityId String
+  summary  String
+
+  @@index([at])
+  @@index([entity, entityId])
+}
+
+model CompanyProfile {
+  id                String  @id @default("company")
+  legalName         String
+  address           String
+  city              String
+  state             String
+  zip               String
+  phone             String
+  nsfNote           String
+  showExampleBanner Boolean    @default(false)
+  entityType        EntityType @default(S_CORP)
+  emailDigest       Boolean    @default(false)
+  lastDigestOn      DateTime?
+  trevorEmail       String     @default("")
+}
+
+model OperatingManual {
+  id        String   @id @default("manual")
+  body      String
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+}
+
+model HelpRequest {
+  id             String    @id @default(cuid())
+  userId         String
+  userName       String
+  screen         String
+  recordRef      String    @default("")
+  message        String
+  status         String    @default("open")
+  answer         String    @default("")
+  answeredBy     String    @default("")
+  screenshot     Bytes?
+  screenshotName String    @default("")
+  createdAt      DateTime  @default(now())
+  answeredAt     DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  prefix     String
+  hash       String    @unique
+  scopes     String
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+}
+
+model OutboundDraft {
+  id             String   @id @default(cuid())
+  kind           String
+  entityId       String
+  toAddress      String
+  subject        String
+  body           String
+  html           String   @default("")
+  attachmentName String
+  pdf            Bytes
+  status         String   @default("DRAFT")
+  detail         String   @default("")
+  createdAt      DateTime @default(now())
+}
+
+model Party {
+  id               String    @id @default(cuid())
+  code             String    @unique
+  name             String
+  nameKey          String    @unique
+  isCustomer       Boolean   @default(false)
+  isVendor         Boolean   @default(false)
+  channel          Channel   @default(DIRECT)
+  contactName      String    @default("")
+  email            String    @default("")
+  phone            String    @default("")
+  billStreet       String    @default("")
+  billCity         String    @default("")
+  billState        String    @default("")
+  billZip          String    @default("")
+  shipStreet       String    @default("")
+  shipCity         String    @default("")
+  shipState        String    @default("")
+  shipZip          String    @default("")
+  taxLocality      String    @default("")
+  paymentTermsDays Int       @default(30)
+  creditLimitCents Int       @default(0)
+  priceLevel       String    @default("LIST")
+  taxExempt        Boolean   @default(false)
+  exemptionNumber  String    @default("")
+  exemptionState   String    @default("")
+  exemptionExpires DateTime?
+  leadTimeDays     Int?
+  active           Boolean   @default(true)
+  notes            String     @default("")
+  w9OnFile         Boolean    @default(false)
+  w9ReceivedOn     DateTime?
+  infoReturn       InfoReturn @default(NONE)
+  isExample        Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+
+  quotes           Quote[]
+  orders           SalesOrder[]
+  invoices         Invoice[]
+  customerPayments CustomerPayment[]
+  purchaseOrders   PurchaseOrder[]
+  bills            VendorBill[]
+  vendorPayments   VendorPayment[]
+  preferredOn      Product[]            @relation("PreferredVendor")
+}
+
+model Product {
+  id                String      @id @default(cuid())
+  sku               String      @unique
+  name              String
+  nameKey           String      @unique
+  kind              ProductKind
+  path              ProductPath @default(MANUFACTURED)
+  form              ProductForm @default(OTHER)
+  specificGravity   Decimal?    @db.Decimal(8, 4)
+  unit              String
+  category          String      @default("")
+  standardCost      Decimal     @default(0) @db.Decimal(18, 6)
+  listPrice         Decimal?    @db.Decimal(18, 4)
+  priceStatus       PriceStatus @default(UNSET)
+  allowOneDollar    Boolean     @default(false)
+  sellable          Boolean     @default(false)
+  taxable           Boolean     @default(true)
+  trackInventory    Boolean     @default(true)
+  minQty            Decimal     @default(0) @db.Decimal(18, 4)
+  safetyQty         Decimal     @default(0) @db.Decimal(18, 4)
+  maxQty            Decimal     @default(0) @db.Decimal(18, 4)
+  moq               Decimal     @default(0) @db.Decimal(18, 4)
+  orderMultiple     Decimal     @default(0) @db.Decimal(18, 4)
+  coverDays         Int         @default(14)
+  shelfLifeDays     Int?
+  pack              String      @default("")
+  casNumber         String      @default("")
+  preferredVendorId String?
+  preferredVendor   Party?      @relation("PreferredVendor", fields: [preferredVendorId], references: [id])
+  leadTimeDays      Int?
+  safetyWeeks       Int         @default(2)
+  weeklyUseOverride Decimal?    @db.Decimal(18, 4)
+  nsfCertified      Boolean     @default(false)
+  nsfCertNumber     String      @default("")
+  nsfBody           String      @default("")
+  nsfUses           String      @default("")
+  nsfIssuedOn       DateTime?
+  nsfExpiresOn      DateTime?
+  nsfFormulaVersion Int?
+  nsfClaim          String      @default("")
+  nsfListingId      String?
+  nsfListing        NsfListing? @relation(fields: [nsfListingId], references: [id])
+  unNumber          String      @default("")
+  properShippingName String     @default("")
+  transportClass    String      @default("")
+  packingGroup      String      @default("")
+  appearance        String      @default("")
+  phText            String      @default("")
+  flashPoint        String      @default("")
+  solubility        String      @default("")
+  ghsClassification String      @default("")
+  ghsSignal         String      @default("")
+  ghsPictograms     String      @default("")
+  hazardStatements  String      @default("")
+  precautionary     String      @default("")
+  active            Boolean     @default(true)
+  notes             String      @default("")
+  isExample         Boolean     @default(false)
+  lastPurchasePrice Decimal?    @db.Decimal(18, 4)
+
+  formulas         Formula[]
+  priceBreaks      PriceBreak[]
+  forecasts        DemandForecast[]
+  amazonSkuMaps    AmazonSkuMap[]
+  formulaLines     FormulaLine[]
+  specs            QualitySpec[]
+  lots             Lot[]
+  quoteLines       QuoteLine[]
+  orderLines       SalesOrderLine[]
+  poLines          PurchaseOrderLine[]
+  batches          ProductionBatch[]
+  packagedSkus     PackagedSku[] @relation("BulkProduct")
+  outputOfPackages PackagedSku[] @relation("PackagedOutput")
+  packBomLines     PackBomLine[]
+  documents        SafetyDocument[]
+
+  @@index([kind])
+}
+
+model Formula {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  version   Int
+  batchQty        Decimal  @db.Decimal(18, 4)
+  specificGravity Decimal? @db.Decimal(8, 4)
+  isDefault       Boolean  @default(false)
+  notes           String   @default("")
+
+  lines   FormulaLine[]
+  batches ProductionBatch[]
+
+  @@unique([productId, version])
+}
+
+model FormulaLine {
+  id           String  @id @default(cuid())
+  formulaId    String
+  formula      Formula @relation(fields: [formulaId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Product @relation(fields: [ingredientId], references: [id])
+  percent      Decimal @db.Decimal(10, 4)
+  qtyLb        Decimal @default(0) @db.Decimal(18, 4)
+  sort         Int
+}
+
+model QualitySpec {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  parameter String
+  unit      String
+  min       Decimal? @db.Decimal(18, 4)
+  max       Decimal? @db.Decimal(18, 4)
+  target    Decimal? @db.Decimal(18, 4)
+}
+
+model Location {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  shippable Boolean @default(false)
+
+  movements Movement[]
+}
+
+model Lot {
+  id             String    @id @default(cuid())
+  lotNumber      String    @unique
+  productId      String
+  product        Product   @relation(fields: [productId], references: [id])
+  qcStatus       QcStatus  @default(QUARANTINE)
+  unitCost       Decimal   @db.Decimal(18, 6)
+  receivedOn     DateTime?
+  manufacturedOn DateTime?
+  expiresOn      DateTime?
+  supplierLot    String    @default("")
+  origin         String
+  formulaVersion Int?
+  nsfEligible    Boolean   @default(false)
+  notes          String    @default("")
+  isExample      Boolean   @default(false)
+  releasedOn     DateTime?
+  releasedBy     String    @default("")
+
+  movements     Movement[]
+  consumptions  BatchConsumption[]
+  qcResults     QcResult[]
+  outputOf      ProductionBatch? @relation("OutputLot")
+  deliveryLines DeliveryLine[]
+  receiptLines  ReceiptLine[]
+}
+
+model Movement {
+  id         String   @id @default(cuid())
+  at         DateTime @default(now())
+  lotId      String
+  lot        Lot      @relation(fields: [lotId], references: [id])
+  productId  String
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  qty        Decimal  @db.Decimal(18, 4)
+  reason     String
+  refType    String
+  refId      String
+  note       String   @default("")
+
+  @@index([lotId])
+  @@index([productId])
+}
+
+model QcResult {
+  id        String   @id @default(cuid())
+  lotId     String
+  lot       Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  parameter String
+  value     Decimal  @db.Decimal(18, 4)
+  min       Decimal? @db.Decimal(18, 4)
+  max       Decimal? @db.Decimal(18, 4)
+  unit      String   @default("")
+  passed    Boolean
+}
+
+model NumberSequence {
+  name String @id
+  next Int
+}
+
+model PriceBreak {
+  id             String  @id @default(cuid())
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceLevel     String
+  minQty         Decimal @db.Decimal(18, 4)
+  unitPriceCents Int
+
+  @@unique([productId, priceLevel, minQty])
+}
+
+model TaxRate {
+  id        String  @id @default(cuid())
+  state     String
+  locality  String  @default("")
+  name      String
+  rateBps   Int
+  active    Boolean @default(true)
+  isExample Boolean @default(false)
+}
+
+model Quote {
+  id              String       @id @default(cuid())
+  number          String
+  revision        String       @default("A")
+  partyId         String
+  party           Party        @relation(fields: [partyId], references: [id])
+  status          QuoteStatus  @default(DRAFT)
+  issuedOn        DateTime
+  validUntil      DateTime
+  shipStreet      String       @default("")
+  shipCity        String       @default("")
+  shipState       String       @default("")
+  shipZip         String       @default("")
+  taxLocality     String       @default("")
+  notes           String       @default("")
+  incoterm        Incoterm     @default(EXW)
+  namedPlace      String       @default("")
+  currency        String       @default("USD")
+  creditTerm      CreditTerm   @default(NET_30)
+  customNetDays   Int          @default(30)
+  earlyPayBps     Int          @default(0)
+  earlyPayDays    Int          @default(0)
+  freightCents    Int          @default(0)
+  insuranceCents  Int          @default(0)
+  docDiscountKind DiscountKind @default(NONE)
+  docDiscountValue Int         @default(0)
+  discountCents   Int          @default(0)
+  goodsNetCents   Int          @default(0)
+  subtotalCents   Int          @default(0)
+  taxCents        Int          @default(0)
+  totalCents      Int          @default(0)
+  isExample       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  lines QuoteLine[]
+  order SalesOrder?
+
+  @@unique([number, revision])
+}
+
+model QuoteLine {
+  id             String  @id @default(cuid())
+  quoteId        String
+  quote          Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id])
+  description    String
+  qty            Decimal      @db.Decimal(18, 4)
+  unitPriceCents Int
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
+  priceSource    String       @default("")
+  sort           Int
+}
+
+model SalesOrder {
+  id          String      @id @default(cuid())
+  number      String      @unique
+  partyId     String
+  party       Party       @relation(fields: [partyId], references: [id])
+  quoteId     String?     @unique
+  quote       Quote?      @relation(fields: [quoteId], references: [id])
+  status      OrderStatus @default(CONFIRMED)
+  orderedOn   DateTime
+  shipStreet  String      @default("")
+  shipCity    String      @default("")
+  shipState   String      @default("")
+  shipZip     String      @default("")
+  taxLocality      String       @default("")
+  customerPo       String       @default("")
+  notes            String       @default("")
+  incoterm         Incoterm     @default(EXW)
+  namedPlace       String       @default("")
+  currency         String       @default("USD")
+  creditTerm       CreditTerm   @default(NET_30)
+  customNetDays    Int          @default(30)
+  earlyPayBps      Int          @default(0)
+  earlyPayDays     Int          @default(0)
+  freightCents     Int          @default(0)
+  insuranceCents   Int          @default(0)
+  docDiscountKind  DiscountKind @default(NONE)
+  docDiscountValue Int          @default(0)
+  discountCents    Int          @default(0)
+  goodsNetCents    Int          @default(0)
+  isExample        Boolean      @default(false)
+
+  lines      SalesOrderLine[]
+  deliveries Delivery[]
+  invoices   Invoice[]
+}
+
+model SalesOrderLine {
+  id             String     @id @default(cuid())
+  orderId        String
+  order          SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product    @relation(fields: [productId], references: [id])
+  description    String
+  qty            Decimal      @db.Decimal(18, 4)
+  unitPriceCents Int
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
+  sort           Int
+
+  deliveryLines DeliveryLine[]
+}
+
+model Delivery {
+  id        String   @id @default(cuid())
+  number    String   @unique
+  orderId   String
+  order     SalesOrder @relation(fields: [orderId], references: [id])
+  shippedOn DateTime
+  carrier   String   @default("")
+  tracking  String   @default("")
+  notes     String   @default("")
+  journalId String?
+  isExample Boolean  @default(false)
+
+  lines   DeliveryLine[]
+  invoice Invoice?
+}
+
+model DeliveryLine {
+  id          String         @id @default(cuid())
+  deliveryId  String
+  delivery    Delivery       @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   SalesOrderLine @relation(fields: [orderLineId], references: [id])
+  lotId       String
+  lot         Lot            @relation(fields: [lotId], references: [id])
+  qty         Decimal        @db.Decimal(18, 4)
+  cogsCents   Int            @default(0)
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  number           String        @unique
+  partyId          String
+  party            Party         @relation(fields: [partyId], references: [id])
+  orderId          String?
+  order            SalesOrder?   @relation(fields: [orderId], references: [id])
+  deliveryId       String?       @unique
+  delivery         Delivery?     @relation(fields: [deliveryId], references: [id])
+  issuedOn         DateTime
+  dueOn            DateTime
+  status           InvoiceStatus @default(OPEN)
+  subtotalCents    Int
+  taxCents         Int
+  totalCents       Int
+  balanceCents     Int
+  feeCents         Int           @default(0)
+  taxableCents     Int           @default(0)
+  taxJson          Json?
+  exemptionApplied Boolean       @default(false)
+  exemptionNumber  String        @default("")
+  channel            Channel       @default(DIRECT)
+  fulfillment        FulfillmentPlace @default(WAREHOUSE)
+  marketplaceOrderId String        @default("")
+  incoterm           Incoterm      @default(EXW)
+  namedPlace         String        @default("")
+  currency           String        @default("USD")
+  creditTerm         CreditTerm    @default(NET_30)
+  customNetDays      Int           @default(30)
+  earlyPayBps        Int           @default(0)
+  earlyPayDays       Int           @default(0)
+  freightCents       Int           @default(0)
+  insuranceCents     Int           @default(0)
+  docDiscountKind    DiscountKind  @default(NONE)
+  docDiscountValue   Int           @default(0)
+  discountCents      Int           @default(0)
+  goodsNetCents      Int           @default(0)
+  earlyTakenCents    Int           @default(0)
+  salesJournalId     String?
+  cogsJournalId    String?
+  notes            String        @default("")
+  isExample        Boolean       @default(false)
+
+  lines        InvoiceLine[]
+  applications PaymentApplication[]
+}
+
+model InvoiceLine {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId      String
+  description    String
+  qty            Decimal      @db.Decimal(18, 4)
+  unitPriceCents Int
+  taxable        Boolean      @default(true)
+  discountKind   DiscountKind @default(NONE)
+  discountValue  Int          @default(0)
+  discountCents  Int          @default(0)
+  cogsCents      Int          @default(0)
+}
+
+model CustomerPayment {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  partyId     String
+  party       Party    @relation(fields: [partyId], references: [id])
+  paidOn      DateTime
+  amountCents Int
+  method      String
+  reference   String   @default("")
+  journalId   String?
+  notes       String   @default("")
+  isExample   Boolean  @default(false)
+
+  applications PaymentApplication[]
+}
+
+model PaymentApplication {
+  id          String          @id @default(cuid())
+  paymentId   String
+  payment     CustomerPayment @relation(fields: [paymentId], references: [id])
+  invoiceId     String
+  invoice       Invoice         @relation(fields: [invoiceId], references: [id])
+  amountCents   Int
+  discountCents Int             @default(0)
+}
+
+model PurchaseOrder {
+  id         String   @id @default(cuid())
+  number     String   @unique
+  partyId    String
+  party      Party    @relation(fields: [partyId], references: [id])
+  status     PoStatus @default(DRAFT)
+  orderedOn  DateTime
+  expectedOn DateTime?
+  notes      String   @default("")
+  isExample  Boolean  @default(false)
+
+  lines    PurchaseOrderLine[]
+  receipts Receipt[]
+}
+
+model PurchaseOrderLine {
+  id             String        @id @default(cuid())
+  orderId        String
+  order          PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product       @relation(fields: [productId], references: [id])
+  description    String
+  qty            Decimal       @db.Decimal(18, 4)
+  qtyReceived    Decimal       @default(0) @db.Decimal(18, 4)
+  unitPriceCents Int
+  sort           Int
+
+  receiptLines ReceiptLine[]
+}
+
+model Receipt {
+  id         String        @id @default(cuid())
+  number     String        @unique
+  orderId    String
+  order      PurchaseOrder @relation(fields: [orderId], references: [id])
+  receivedOn DateTime
+  notes      String        @default("")
+  journalId  String?
+  isExample  Boolean       @default(false)
+
+  lines ReceiptLine[]
+  bill  VendorBill?
+}
+
+model ReceiptLine {
+  id          String            @id @default(cuid())
+  receiptId   String
+  receipt     Receipt           @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   PurchaseOrderLine @relation(fields: [orderLineId], references: [id])
+  lotId       String
+  lot         Lot               @relation(fields: [lotId], references: [id])
+  qty         Decimal           @db.Decimal(18, 4)
+  supplierLot String            @default("")
+  expiresOn   DateTime?
+}
+
+model VendorBill {
+  id            String     @id @default(cuid())
+  number        String     @unique
+  partyId       String
+  party         Party      @relation(fields: [partyId], references: [id])
+  receiptId     String     @unique
+  receipt       Receipt    @relation(fields: [receiptId], references: [id])
+  vendorRef     String     @default("")
+  billedOn      DateTime
+  dueOn         DateTime
+  status        BillStatus @default(OPEN)
+  subtotalCents Int
+  totalCents    Int
+  balanceCents  Int
+  journalId     String?
+  notes         String     @default("")
+  isExample     Boolean    @default(false)
+
+  lines    VendorBillLine[]
+  payments VendorPayment[]
+}
+
+model VendorBillLine {
+  id                String     @id @default(cuid())
+  billId            String
+  bill              VendorBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  productId         String
+  description       String
+  qty               Decimal    @db.Decimal(18, 4)
+  unitPriceCents    Int
+  receiptValueCents Int
+}
+
+model VendorPayment {
+  id          String     @id @default(cuid())
+  number      String     @unique
+  partyId     String
+  party       Party      @relation(fields: [partyId], references: [id])
+  billId      String
+  bill        VendorBill @relation(fields: [billId], references: [id])
+  paidOn      DateTime
+  amountCents Int
+  method      String
+  reference   String     @default("")
+  journalId   String?
+  notes       String     @default("")
+  isExample   Boolean    @default(false)
+}
+
+model ProductionBatch {
+  id             String      @id @default(cuid())
+  number         String      @unique
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id])
+  formulaId      String
+  formula        Formula     @relation(fields: [formulaId], references: [id])
+  formulaVersion Int
+  plannedQty     Decimal     @db.Decimal(18, 4)
+  actualQty      Decimal?    @db.Decimal(18, 4)
+  status         BatchStatus @default(PLANNED)
+  startedOn      DateTime?
+  closedOn       DateTime?
+  operatorName   String      @default("")
+  outputLotId    String?     @unique
+  outputLot      Lot?        @relation("OutputLot", fields: [outputLotId], references: [id])
+  journalId      String?
+  wipCents       Int?
+  notes          String      @default("")
+  isExample      Boolean     @default(false)
+
+  consumptions BatchConsumption[]
+}
+
+model BatchConsumption {
+  id        String          @id @default(cuid())
+  batchId   String
+  batch     ProductionBatch @relation(fields: [batchId], references: [id])
+  lotId     String?
+  lot       Lot?            @relation(fields: [lotId], references: [id])
+  productId String
+  qty       Decimal         @db.Decimal(18, 4)
+  unitCost  Decimal         @db.Decimal(18, 6)
+}
+
+model Account {
+  id        String      @id @default(cuid())
+  code      String      @unique
+  name      String
+  type      AccountType
+  active    Boolean     @default(true)
+  isExample Boolean     @default(false)
+
+  lines JournalLine[]
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  date        DateTime
+  memo        String
+  source      String
+  sourceId    String   @default("")
+  isExample   Boolean  @default(false)
+  createdById String?
+
+  lines JournalLine[]
+
+  @@index([date])
+  @@index([source])
+}
+
+model JournalLine {
+  id          String       @id @default(cuid())
+  entryId     String
+  entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     Account      @relation(fields: [accountId], references: [id])
+  debitCents  Int          @default(0)
+  creditCents Int          @default(0)
+  memo        String       @default("")
+
+  @@index([accountId])
+}
+
+model BankAccount {
+  id          String  @id @default(cuid())
+  name        String
+  glAccountId String
+  active      Boolean @default(true)
+
+  imports StatementImport[]
+}
+
+model StatementImport {
+  id                 String   @id @default(cuid())
+  bankAccountId      String
+  bankAccount        BankAccount @relation(fields: [bankAccountId], references: [id])
+  statementDate      DateTime
+  endingBalanceCents Int
+  fileName           String
+  createdAt          DateTime @default(now())
+
+  lines StatementLine[]
+}
+
+model StatementLine {
+  id               String          @id @default(cuid())
+  importId         String
+  import           StatementImport @relation(fields: [importId], references: [id])
+  bankAccountId    String
+  postedOn         DateTime
+  description      String
+  amountCents      Int
+  fingerprint      String
+  matchedKind      String          @default("")
+  matchedId        String          @default("")
+  matchedJournalId String?         @unique
+  reconciled       Boolean         @default(false)
+
+  @@unique([bankAccountId, fingerprint])
+}
+
+model FixedAsset {
+  id                  String   @id @default(cuid())
+  description         String
+  placedInService     DateTime
+  costCents           Int
+  section179Candidate Boolean  @default(true)
+  notes               String   @default("")
+  isExample           Boolean  @default(false)
+}
+
+model AmazonAssembly {
+  id          String    @id @default(cuid())
+  packedOn    DateTime
+  productId   String
+  sku         String
+  units       Int
+  runId       String    @default("")
+  confirmedAt DateTime?
+}
+
+model AmazonInvoiceFile {
+  invoiceId String @id
+  period    String
+  filename  String
+  pdf       Bytes
+}
+
+model FbaShipment {
+  id           String   @id @default(cuid())
+  shipmentId   String   @unique
+  shippedOn    DateTime
+  freightCents Int      @default(0)
+  spreadBy     String   @default("UNITS")
+  status       String   @default("IN_TRANSIT")
+  journalId    String?
+  lines        FbaShipmentLine[]
+}
+
+model FbaShipmentLine {
+  id             String      @id @default(cuid())
+  shipmentId     String
+  shipment       FbaShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  productId      String
+  sourceLotId    String
+  fbaLotId       String
+  qtyShipped     Decimal     @db.Decimal(18, 4)
+  qtyReceived    Decimal     @default(0) @db.Decimal(18, 4)
+  weightLb       Decimal     @default(0) @db.Decimal(18, 4)
+  landedUnitCost Decimal     @db.Decimal(18, 6)
+  claimQty       Decimal     @default(0) @db.Decimal(18, 4)
+}
+
+model FbaBalance {
+  productId      String   @id
+  fulfillable    Decimal  @default(0) @db.Decimal(18, 4)
+  inbound        Decimal  @default(0) @db.Decimal(18, 4)
+  unfulfillable  Decimal  @default(0) @db.Decimal(18, 4)
+  reserved       Decimal  @default(0) @db.Decimal(18, 4)
+  shipped30      Decimal  @default(0) @db.Decimal(18, 4)
+  daysOfSupply   Decimal? @db.Decimal(18, 4)
+  source         String   @default("MANUAL")
+  updatedAt      DateTime @updatedAt
+}
+
+model AmazonSkuMap {
+  id         String   @id @default(cuid())
+  amazonSku  String   @unique
+  asin       String   @default("")
+  productId  String?
+  product    Product? @relation(fields: [productId], references: [id])
+}
+
+model AmazonOrderItem {
+  id              String   @id @default(cuid())
+  amazonOrderId   String
+  orderItemId     String
+  purchaseDate    DateTime
+  lastUpdated     String   @default("")
+  orderStatus     String   @default("")
+  fulfillment     String   @default("")
+  sku             String   @default("")
+  asin            String   @default("")
+  productName     String   @default("")
+  qty             Decimal  @db.Decimal(18, 4)
+  netCents        Int      @default(0)
+  currency        String   @default("USD")
+  shipCity        String   @default("")
+  shipState       String   @default("")
+  shipPostalCode  String   @default("")
+  shipCountry     String   @default("")
+  cancelled       Boolean  @default(false)
+  shipped         Boolean  @default(false)
+  productId       String?
+  invoiceId       String?
+  isExample       Boolean  @default(false)
+
+  @@unique([amazonOrderId, orderItemId])
+}
+
+model AmazonSettlementLine {
+  id                       String  @id @default(cuid())
+  fingerprint              String  @unique
+  postedAt                 String
+  settlementId             String  @default("")
+  type                     String
+  orderId                  String  @default("")
+  sku                      String  @default("")
+  description              String  @default("")
+  qty                      Decimal @default(0) @db.Decimal(18, 4)
+  fulfillment              String  @default("")
+  productSalesCents        Int     @default(0)
+  sellingFeeCents          Int     @default(0)
+  fbaFeeCents              Int     @default(0)
+  otherTransactionFeeCents Int     @default(0)
+  otherCents               Int     @default(0)
+  promotionalRebatesCents  Int     @default(0)
+  totalCents               Int     @default(0)
+  productId                String?
+  journalId                String?
+  isExample                Boolean @default(false)
+}
+
+model ScheduleRelease {
+  id         String   @id @default(cuid())
+  number     String   @unique
+  weekOf     DateTime
+  windowWeeks Int
+  notes      String   @default("")
+  emailedTo  String   @default("")
+  createdAt  DateTime @default(now())
+  lines      ScheduleReleaseLine[]
+}
+
+model ScheduleReleaseLine {
+  id             String           @id @default(cuid())
+  releaseId      String
+  release        ScheduleRelease  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  productId      String
+  sku            String
+  name           String
+  packageLabel   String
+  qty            Decimal          @db.Decimal(18, 4)
+  fbaQty         Decimal          @default(0) @db.Decimal(18, 4)
+  unit           String
+  dueOn          DateTime
+  formulaVersion Int?
+  pullLot        String           @default("")
+  materials      String           @default("")
+  daysCover      Decimal?         @db.Decimal(18, 4)
+  shortage       Boolean          @default(false)
+}
+
+model DemandForecast {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel   String
+  weekOf    DateTime
+  qty       Decimal  @db.Decimal(18, 4)
+  isExample Boolean  @default(false)
+
+  @@unique([productId, channel, weekOf])
+}
+
+model AlertRecipient {
+  id        String  @id @default(cuid())
+  email     String
+  productId String?
+  category  String  @default("")
+  isExample Boolean @default(false)
+}
+
+model StockAlert {
+  productId  String      @id
+  status     String
+  emailedOn  DateTime?
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  toAddress String
+  subject   String
+  body      String
+  status    String
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model ImportBatch {
+  id        String   @id @default(cuid())
+  kind      String
+  fileName  String
+  createdAt DateTime @default(now())
+  createdBy String
+  rowCount  Int
+  notes     String   @default("")
+}
+
+/// Official NSF/ANSI/CAN 60 trade names from the public listing. Not example products.
+model NsfListing {
+  id           String   @id @default(cuid())
+  tradeName    String
+  category     String
+  function     String
+  maxUseMgL    Decimal  @db.Decimal(8, 2)
+  sourceUrl    String
+  listedAsOf   DateTime
+  active       Boolean  @default(true)
+  products     Product[]
+
+  @@unique([tradeName])
+}
+
+model PackagedSku {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation("BulkProduct", fields: [productId], references: [id])
+  outputProductId String
+  outputProduct  Product  @relation("PackagedOutput", fields: [outputProductId], references: [id])
+  packageCode    String
+  unitsPerCase   Int
+  casesPerPallet Int
+  laborPerUnit   Decimal  @default(0) @db.Decimal(18, 4)
+  isExample      Boolean  @default(false)
+  lines          PackBomLine[]
+  runs           PackRun[]
+
+  @@unique([outputProductId])
+  @@index([productId, packageCode])
+}
+
+model PackBomLine {
+  id            String      @id @default(cuid())
+  packagedSkuId String
+  packagedSku   PackagedSku @relation(fields: [packagedSkuId], references: [id], onDelete: Cascade)
+  materialId    String
+  material      Product     @relation(fields: [materialId], references: [id])
+  basis         PackBasis
+  qty           Decimal     @db.Decimal(18, 4)
+}
+
+model PackRun {
+  id                  String      @id @default(cuid())
+  number              String      @unique
+  packagedSkuId       String
+  packagedSku         PackagedSku @relation(fields: [packagedSkuId], references: [id])
+  units               Int
+  packedOn            DateTime
+  journalId           String?
+  contentsCostCents   Int
+  packagingCostCents  Int
+  laborCents          Int
+  outputLotId         String?
+  isExample           Boolean     @default(false)
+}
+
+model SafetyDocument {
+  id           String    @id @default(cuid())
+  number       String    @unique
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  kind         DocKind
+  version      Int
+  status       DocStatus @default(DRAFT)
+  revisionOn   DateTime
+  title        String
+  snapshot     Json
+  reviewNote   String    @default("")
+  reviewedBy   String    @default("")
+  reviewedAt   DateTime?
+  publishedAt  DateTime?
+  isExample    Boolean   @default(false)
+
+  @@unique([productId, kind, version])
+  @@index([kind, status])
+}
+
+model Employee {
+  id                     String   @id @default(cuid())
+  name                   String
+  payType                PayType
+  rateCents              Int
+  federalWithholdingBps  Int      @default(0)
+  active                 Boolean  @default(true)
+  isExample              Boolean  @default(false)
+  stubs                  PayStub[]
+}
+
+model PayrollTaxTable {
+  id                           String    @id @default("current")
+  reviewed                     Boolean   @default(false)
+  socialSecurityBps            Int       @default(620)
+  socialSecurityWageBaseCents  Int       @default(17610000)
+  medicareBps                  Int       @default(145)
+  futaBps                      Int       @default(60)
+  futaWageBaseCents            Int       @default(700000)
+  floridaBps                   Int       @default(270)
+  floridaWageBaseCents         Int       @default(700000)
+  note                         String    @default("Example rates. The accountant must review this table before a calculated pay run can be posted. SPIKE does not file payroll taxes.")
+}
+
+model PayRun {
+  id        String       @id @default(cuid())
+  number    String       @unique
+  periodStart DateTime
+  periodEnd   DateTime
+  payDate     DateTime
+  status    PayRunStatus @default(DRAFT)
+  source    String       @default("CALCULATOR")
+  journalId String?
+  notes     String       @default("")
+  isExample Boolean      @default(false)
+  stubs     PayStub[]
+}
+
+model PayStub {
+  id                    String   @id @default(cuid())
+  runId                 String
+  run                   PayRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee @relation(fields: [employeeId], references: [id])
+  hours                 Decimal  @default(0) @db.Decimal(8, 2)
+  grossCents            Int
+  federalWithholdingCents Int
+  socialSecurityCents   Int
+  medicareCents         Int
+  employerSocialSecurityCents Int
+  employerMedicareCents Int
+  futaCents             Int
+  floridaCents          Int
+  netCents              Int
+
+  @@unique([runId, employeeId])
+}

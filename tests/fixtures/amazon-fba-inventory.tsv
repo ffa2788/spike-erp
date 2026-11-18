@@ -1,0 +1,4 @@
+snapshot-date	sku	fnsku	asin	product-name	condition	available	inbound-working	inbound-shipped	inbound-received	inbound-quantity	Total Reserved Quantity	unfulfillable-quantity	units-shipped-t30	days-of-supply	extra-column
+2026-11-14	SC-RP1-1.0-1	X000SYNTH	B0BZLYZQ2P	Synthetic Rust Preventer	New	6	1	2	1	4	1	0	3	20	ignore-me
+2026-11-14	SC-RP1-1.0-1 -FBA	X000SYNTH2	B0BZLYZQ2P	Synthetic Rust Preventer FBA	New	2	0	0	0	0	0	1	1	5	ignore-me
+2026-11-14	B0CTQ1TFCT.missing01	X000JUNK	B0CTQ1TFCT	Synthetic junk	New	9	0	0	0	0	0	0	0	1	ignore-me

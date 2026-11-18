@@ -1,0 +1,2 @@
+ALTER TABLE "Product" ADD COLUMN "safetyWeeks" INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE "Product" ADD COLUMN "weeklyUseOverride" DECIMAL(18,4);

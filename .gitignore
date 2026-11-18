@@ -1,0 +1,18 @@
+node_modules
+.next
+.vercel
+.env
+tsconfig.tsbuildinfo
+.env.local
+owner-initial-password.txt
+
+# Seller Central downloads. Never commit a private Amazon report.
+amazon-reports/
+*GET_FLAT_FILE*
+*GET_V2_SETTLEMENT*
+*.log
+dist
+/coverage
+.DS_Store
+prisma/*.db
+prisma/*.db-journal
