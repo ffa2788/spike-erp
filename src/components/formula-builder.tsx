@@ -92,7 +92,7 @@ export function FormulaBuilder({
               <input type="hidden" name="pounds" value={row.pounds} />
             </span>
           ))}
-          <div className="row" style={{ marginBottom: 10 }}>
+          <div className="row">
             <label className="field" style={{ margin: 0 }}>Make
               <input value={scale} onChange={(event) => setScale(event.target.value)} inputMode="decimal" placeholder={form === "LIQUID" ? "gallons" : "pounds"} />
             </label>
@@ -137,7 +137,7 @@ export function FormulaBuilder({
               <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
             </label>
           ) : null}
-          <div className="row" style={{ marginTop: 12 }}>
+          <div className="row">
             <button className="btn" type="submit">Save</button>
             <button className="btn secondary" type="button" onClick={() => setAdvanced((value) => !value)}>{advanced ? "Hide advanced" : "Advanced"}</button>
           </div>
