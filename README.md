@@ -76,16 +76,16 @@ You need Node 22 and PostgreSQL.
 
 ```bash
 cp .env.example .env
-# Set DATABASE_URL and a long AUTH_SECRET.
+# Set DATABASE_URL, DIRECT_URL (the same local URL), and a long AUTH_SECRET.
 npm install
 npx prisma migrate deploy
-ALLOW_SEED=yes npm run seed
+ALLOW_SEED=yes SEED_EXAMPLE=yes npm run seed
 npm run dev
 ```
 
 Open http://localhost:3000.
 
-`npm run seed` wipes that database and loads the example company. It refuses to run unless `ALLOW_SEED=yes` and the database name contains `spike`.
+`npm run seed` with no flag creates only an owner login. Example customers, prices, and certificates load only when `SEED_EXAMPLE=yes` and `ALLOW_SEED=yes`, and only into a local database whose name contains `spike`. See docs/DEPLOY.md.
 
 ## Tests
 
@@ -103,17 +103,9 @@ The integration test loads the example company into `DATABASE_URL` (see `.env.te
 
 ## Deploy to Vercel
 
-Use Neon or Supabase for Postgres. Put the direct (non-pooled) connection string in `DATABASE_URL`. Pooled connections often fail during migrations.
+Production is Vercel for the app and Neon for Postgres, on https://erp.sperchemical.com. The steps, the environment-variable table, and the owner seed are in [docs/DEPLOY.md](docs/DEPLOY.md).
 
-In the Vercel project settings:
-
-- `DATABASE_URL` — Postgres connection string
-- `AUTH_SECRET` — a long random string, at least 32 characters
-- Do not set `ALLOW_SEED` on production
-
-The build command is `prisma generate && prisma migrate deploy && next build`. The first deploy creates the tables. Create the first owner in the database, or run the seed once against a throwaway database and then replace the example users.
-
-After the books are real, turn off the yellow example banner in the `CompanyProfile` row (`showExampleBanner = false`) and delete the example users.
+The Vercel build command is `npm run build` (`prisma generate && prisma migrate deploy && next build`). Do not set `SEED_EXAMPLE` or `ALLOW_SEED` on Vercel. The first owner is created with `npm run seed` from your own machine, against the Neon direct URL. That command does not load example data.
 
 ## Backups
 

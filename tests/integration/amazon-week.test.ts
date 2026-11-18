@@ -6,6 +6,8 @@ import { seedDemo } from "@/lib/seed-demo";
 import { loadAmazonReconciliation } from "@/lib/services/amazon-report-import";
 import { importAllOrdersFile } from "@/lib/services/amazon-import";
 import { importPaymentsFile } from "@/lib/services/amazon-payments-import";
+import { postJournal, run } from "@/lib/services/shared";
+import { CODES } from "@/lib/chart";
 
 const orders = readFileSync("tests/fixtures/amazon-all-orders.tsv", "utf8");
 const payments = readFileSync("tests/fixtures/amazon-payments.csv", "utf8");
@@ -19,6 +21,8 @@ describe("a sample Amazon week posts from the reports", () => {
     await seedDemo();
     const owner = await prisma.user.findUniqueOrThrow({ where: { email: "frank@sper.example" } });
     const actor = { id: owner.id, name: owner.name, role: "OWNER" as const };
+    await placeExampleStock(actor, "RUST-1G", "AMAZON", 10);
+    await placeExampleStock(actor, "RUST-REM", "MAIN", 10);
     const posted = await importAllOrdersFile(actor, orders);
     expect(posted.ok).toBe(true);
     if (!posted.ok) return;
@@ -55,3 +59,28 @@ describe("a sample Amazon week posts from the reports", () => {
     expect(check.value.refundCount).toBeGreaterThan(0);
   });
 });
+
+async function placeExampleStock(actor: { id: string; name: string; role: "OWNER" }, sku: string, locationCode: string, qty: number) {
+  const product = await prisma.product.findUniqueOrThrow({ where: { sku } });
+  const location = await prisma.location.findUniqueOrThrow({ where: { code: locationCode } });
+  const on = new Date("2026-10-01T12:00:00Z");
+  const placed = await run(async (tx) => {
+    const lot = await tx.lot.create({
+      data: { lotNumber: `EX-${sku}-${locationCode}`, productId: product.id, qcStatus: "APPROVED", unitCost: 5, receivedOn: on, origin: "MAKE", isExample: true },
+    });
+    await tx.movement.create({
+      data: { at: on, lotId: lot.id, productId: product.id, locationId: location.id, qty, reason: "OPENING", refType: "Lot", refId: lot.id },
+    });
+    return postJournal(tx, actor, {
+      date: on,
+      memo: `Example stock for ${sku}`,
+      source: "OPENING",
+      lines: [
+        { accountCode: CODES.invFg, debitCents: qty * 500, creditCents: 0, memo: sku },
+        { accountCode: CODES.equity, debitCents: 0, creditCents: qty * 500, memo: sku },
+      ],
+      isExample: true,
+    });
+  });
+  if (!placed.ok) throw new Error(placed.error);
+}

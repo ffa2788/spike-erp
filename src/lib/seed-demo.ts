@@ -47,17 +47,25 @@ export async function wipeDatabase() {
       "JournalLine", "JournalEntry", "StatementLine", "StatementImport", "BankAccount",
       "Account", "Product", "Party", "TaxRate", "Location", "NumberSequence",
       "ImportBatch", "EmailLog", "StockAlert", "AlertRecipient", "DemandForecast",
-      "ScheduleReleaseLine", "ScheduleRelease", "FbaBalance", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "PayStub", "PayRun", "Employee", "PayrollTaxTable", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
+      "ScheduleReleaseLine", "ScheduleRelease", "FbaShipmentLine", "FbaShipment", "FbaBalance", "AmazonAssembly", "AmazonInvoiceFile", "AmazonSettlementLine", "AmazonOrderItem", "AmazonSkuMap", "ApiKey", "OutboundDraft", "PriceBreak", "PayStub", "PayRun", "Employee", "PayrollTaxTable", "FixedAsset", "SafetyDocument", "PackRun", "PackBomLine", "PackagedSku", "NsfListing",
       "AuditLog", "LoginAttempt", "CompanyProfile", "User",
       "HelpRequest", "OperatingManual"
     RESTART IDENTITY CASCADE
   `);
 }
 
+export function exampleSeedBlock(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.ALLOW_SEED !== "yes") return "Set ALLOW_SEED=yes. Seeding wipes the database.";
+  const url = env.DATABASE_URL ?? "";
+  if (!url.includes("spike")) return "Refusing to seed a database whose name does not include spike.";
+  if (env.NODE_ENV === "production") return "Refusing to load example data when NODE_ENV=production.";
+  if (/neon\.tech|supabase\.co|vercel-storage\.com/i.test(url)) return "Refusing to load example data into a hosted database.";
+  return null;
+}
+
 export async function seedDemo() {
-  const url = process.env.DATABASE_URL ?? "";
-  if (!url.includes("spike")) throw new Error("Refusing to seed a database whose name does not include spike.");
-  if (process.env.ALLOW_SEED !== "yes") throw new Error("Set ALLOW_SEED=yes. Seeding wipes the database.");
+  const blocked = exampleSeedBlock();
+  if (blocked) throw new Error(blocked);
   await wipeDatabase();
 
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);

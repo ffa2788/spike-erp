@@ -15,13 +15,14 @@ import {
   type Tx,
 } from "./shared";
 
-export async function ensureFoundation(actor: Actor): Promise<Result<{ accounts: number }>> {
+export async function ensureFoundation(actor: Actor, options?: { example?: boolean }): Promise<Result<{ accounts: number }>> {
+  const example = options?.example ?? true;
   return run(async (tx) => {
     for (const account of CHART) {
       await tx.account.upsert({
         where: { code: account.code },
         update: { name: account.name, type: account.type },
-        create: { ...account, isExample: true },
+        create: { ...account, isExample: example },
       });
     }
     for (const sequence of SEQUENCES) {

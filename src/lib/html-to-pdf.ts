@@ -3,6 +3,10 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+function chromePath(): string {
+  return process.env.CHROME_PATH?.trim() || "/usr/bin/google-chrome";
+}
+
 export async function htmlToPdf(html: string, options?: { footerDate?: string }): Promise<Uint8Array> {
   if (options?.footerDate) return pdfWithFooter(html, options.footerDate);
   const dir = await mkdtemp(join(tmpdir(), "spike-plan-"));
@@ -11,7 +15,7 @@ export async function htmlToPdf(html: string, options?: { footerDate?: string })
   await writeFile(htmlPath, html);
   await new Promise<void>((resolve, reject) => {
     execFile(
-      "google-chrome",
+      chromePath(),
       ["--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer", `--print-to-pdf=${pdfPath}`, htmlPath],
       { timeout: 30000 },
       (error) => (error ? reject(error) : resolve()),
@@ -23,7 +27,7 @@ export async function htmlToPdf(html: string, options?: { footerDate?: string })
 async function pdfWithFooter(html: string, footerDate: string): Promise<Uint8Array> {
   const puppeteer = await import("puppeteer-core");
   const browser = await puppeteer.default.launch({
-    executablePath: "/usr/bin/google-chrome",
+    executablePath: chromePath(),
     headless: true,
     args: ["--no-sandbox", "--disable-gpu"],
   });
