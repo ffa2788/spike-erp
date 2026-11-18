@@ -20,9 +20,8 @@ export async function CustomersPage({
   });
   return (
     <>
-      <div className="row"><h1>Customers</h1><Link className="btn" href="/customers/new">New customer</Link></div>
       <Flash error={query.error} notice={query.notice} />
-      <form><label className="field">Search<input name="q" defaultValue={query.q} /></label><button className="btn secondary">Search</button></form>
+      <form className="search-line"><label className="field">Search<input name="q" defaultValue={query.q} /></label><button className="btn secondary">Search</button></form>
       <div className="wrap"><table>
         <thead><tr><th>ID</th><th>Name</th><th>Channel</th><th>City</th></tr></thead>
         <tbody>

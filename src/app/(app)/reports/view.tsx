@@ -20,7 +20,7 @@ export function ReportsPage() {
     <>
       <h1>Reports</h1>
       <p className="lede">Each report reads the same records as the Today page. Print any of them. The <Link href="/tax">Tax Center</Link> is the year-end package for your CPA.</p>
-      <div className="attention">
+      <div className="report-grid">
         {reports.map(([slug, title, detail]) => (
           <Link key={slug} href={slug === "margins" || slug === "inventory" || slug === "ap" ? `/reports/${slug}` : `/money?tab=reports&id=${slug}&period=month&anchor=2026-10-15`}>
             <article className="card"><strong>{title}</strong><span>{detail}</span></article>

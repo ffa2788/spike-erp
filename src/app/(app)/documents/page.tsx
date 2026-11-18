@@ -29,7 +29,7 @@ export default async function DocumentsPage({
       drawer={id ? <><DrawerClose href="/documents" /><DocumentPage params={Promise.resolve({ id })} searchParams={Promise.resolve(sp)} /></> : undefined}
     >
       <Flash error={query.error} notice={query.notice} />
-      <form>
+      <form className="search-line">
         <label className="field">Search<input name="q" defaultValue={query.q} /></label>
         <button className="btn secondary">Search</button>
       </form>

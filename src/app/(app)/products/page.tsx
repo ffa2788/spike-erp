@@ -49,7 +49,7 @@ export default async function ProductsPage({
       drawer={drawer ? <><DrawerClose href="/products" />{drawer}</> : undefined}
     >
       <Flash error={query.error} notice={query.notice} />
-      <form>
+      <form className="search-line">
         <label className="field">Search<input name="q" defaultValue={query.q} /></label>
         <button className="btn secondary">Search</button>
       </form>

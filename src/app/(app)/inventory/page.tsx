@@ -67,7 +67,7 @@ export default async function InventoryPage({
       {tab === "stock" && (
         <>
           <Flash error={query.error} notice={query.notice} />
-          <form>
+          <form className="search-line">
             <label className="field">Search<input name="q" defaultValue={query.q} /></label>
             <button className="btn secondary" type="submit">Search</button>
           </form>
