@@ -28,7 +28,7 @@ export async function CustomersPage({
           {rows.map((row) => (
             <tr key={row.id}>
               <td><Link href={`/customers/${row.id}`}>{row.code}</Link></td>
-              <td>{row.name}</td>
+              <td>{row.name}{row.isVendor ? " · also a supplier" : ""}</td>
               <td>{CHANNEL_LABEL[row.channel]}</td>
               <td>{row.billCity}</td>
             </tr>

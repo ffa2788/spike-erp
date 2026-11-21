@@ -3,6 +3,7 @@ import { parseCsv } from "./csv";
 import { detectGolive, validateBoms, validateFormulas, validateOpenAp, validateOpenAr, validateStock, validateTrial, type GoliveExisting } from "./golive";
 import { valueCents } from "./inventory";
 import { detectKind, validateAccounts, validateCustomers, validateItems, validateJournal, type ExistingKeys } from "./peachtree";
+import { nameKey } from "./names";
 
 export const IMPORT_ORDER = [
   "customers",
@@ -104,13 +105,22 @@ function accountNet(lines: { accountCode: string; debitCents: number; creditCent
   return normal === "debit" ? net : -net;
 }
 
+export type BundlePreview = {
+  files: { name: string; kind: string; detected: string; csv: string; ready: number; rows: BundleRow[] }[];
+  checks: TieCheck[];
+  okRows: number;
+  errorRows: BundleRow[];
+  roleRows: BundleRow[];
+};
+
 export function previewBundle(
   files: ImportFile[],
   existing: { peachtree: ExistingKeys; golive: GoliveExisting },
-): { files: { name: string; kind: string; detected: string; csv: string; ready: number; rows: BundleRow[] }[]; checks: TieCheck[]; okRows: number; errorRows: BundleRow[] } {
-  const peach = {
+): BundlePreview {
+  const peach: ExistingKeys = {
     partyCodes: [...existing.peachtree.partyCodes],
     partyNames: [...existing.peachtree.partyNames],
+    parties: existing.peachtree.parties?.map((party) => ({ ...party })),
     skus: [...existing.peachtree.skus],
     productNames: [...existing.peachtree.productNames],
     accountCodes: [...existing.peachtree.accountCodes],
@@ -161,8 +171,9 @@ export function previewBundle(
     });
   }
   const errorRows = described.flatMap((file) => file.rows.filter((row) => row.status === "error"));
+  const roleRows = described.flatMap((file) => file.rows.filter((row) => row.status === "role added"));
   const okRows = described.reduce((sum, file) => sum + file.rows.filter((row) => row.status !== "error").length, 0);
-  return { files: described, checks: tieOut({ trial, stockCents, arCents, apCents }), okRows, errorRows };
+  return { files: described, checks: tieOut({ trial, stockCents, arCents, apCents }), okRows, errorRows, roleRows };
 }
 
 function rowsFor(kind: string, rows: Record<string, string>[], peach: ExistingKeys, live: GoliveExisting): { rowNumber: number; status: string; summary: string; messages: string[] }[] {
@@ -183,8 +194,17 @@ function rowsFor(kind: string, rows: Record<string, string>[], peach: ExistingKe
 function remember(kind: string, rows: Record<string, string>[], peach: ExistingKeys, live: GoliveExisting) {
   if (kind === "customers" || kind === "vendors") {
     for (const row of validateCustomers(rows, peach, kind === "vendors").ready) {
-      peach.partyCodes.push(row.code);
-      live.partyCodes.push(row.code);
+      const code = row.code.toUpperCase();
+      const found = peach.parties?.find((party) => party.code.toUpperCase() === code);
+      if (found) {
+        if (kind === "vendors") found.isVendor = true;
+        else found.isCustomer = true;
+      } else {
+        peach.parties = peach.parties ?? [];
+        peach.parties.push({ code, nameKey: nameKey(row.name), isCustomer: kind === "customers", isVendor: kind === "vendors" });
+        peach.partyCodes.push(row.code);
+        live.partyCodes.push(row.code);
+      }
     }
   }
   if (kind === "items") {

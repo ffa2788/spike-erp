@@ -21,7 +21,7 @@ export async function VendorPage({
   return (
     <>
       <h1>{party.name}</h1>
-      <p className="lede">{party.code} · we owe {usd(open._sum.balanceCents ?? 0)}</p>
+      <p className="lede">{party.code} · we owe {usd(open._sum.balanceCents ?? 0)}{party.isCustomer ? " · also a customer. What they owe us is on their invoices, not here." : ""}</p>
       <Flash error={query.error} notice={query.notice} />
       <form action={savePartyAction}>
         <input type="hidden" name="kind" value="vendors" />

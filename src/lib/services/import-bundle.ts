@@ -25,6 +25,7 @@ export async function bundleContext(): Promise<{ peachtree: ExistingKeys; golive
     peachtree: {
       partyCodes: parties.map((party) => party.code),
       partyNames: parties.map((party) => party.nameKey),
+      parties: parties.map((party) => ({ code: party.code, nameKey: party.nameKey, isCustomer: party.isCustomer, isVendor: party.isVendor })),
       skus: products.map((product) => product.sku),
       productNames: products.map((product) => product.nameKey),
       accountCodes: accounts.map((account) => account.code),

@@ -7,7 +7,7 @@ export type ImportKind = "customers" | "vendors" | "items" | "accounts" | "journ
 
 export type PreviewRow = {
   rowNumber: number;
-  status: "ok" | "warning" | "error";
+  status: "ok" | "warning" | "error" | "role added";
   messages: string[];
   summary: string;
 };
@@ -23,6 +23,10 @@ export type CustomerImport = {
   billState: string;
   billZip: string;
   paymentTermsDays: number;
+  leadTimeDays: number | null;
+  w9OnFile: boolean;
+  infoReturn: "NONE" | "NEC" | "MISC";
+  action: "create" | "add-role";
 };
 
 export type ItemImport = {
@@ -50,9 +54,17 @@ export type JournalImport = {
   lines: { accountCode: string; debitCents: number; creditCents: number; memo: string }[];
 };
 
+export type PartyRole = {
+  code: string;
+  nameKey: string;
+  isCustomer: boolean;
+  isVendor: boolean;
+};
+
 export type ExistingKeys = {
   partyCodes: string[];
   partyNames: string[];
+  parties?: PartyRole[];
   skus: string[];
   productNames: string[];
   accountCodes: string[];
@@ -73,48 +85,90 @@ function stateOk(value: string): boolean {
   return value === "" || /^[A-Z]{2}$/.test(value);
 }
 
+function termsDays(raw: string): number | null {
+  const net = /net\s*(\d+)/i.exec(raw);
+  if (net) return Number(net[1]);
+  if (/^\d+$/.test(raw.trim())) return Number(raw.trim());
+  return null;
+}
+
+function infoReturnOf(raw: string): "NEC" | "MISC" | null {
+  const text = raw.trim().toUpperCase();
+  if (!text || text === "NO" || text === "N" || text === "NONE") return null;
+  if (text.includes("MISC")) return "MISC";
+  if (text.includes("NEC") || text === "YES" || text === "Y" || text === "1099") return "NEC";
+  return null;
+}
+
 export function validateCustomers(
   rows: Record<string, string>[],
   existing: ExistingKeys,
   asVendor: boolean,
 ): { rows: (PreviewRow & { data: CustomerImport | null })[]; ready: CustomerImport[] } {
-  const seenCodes = new Set(existing.partyCodes.map((code) => code.toUpperCase()));
-  const seenNames = new Set(existing.partyNames);
+  const parties: PartyRole[] = (existing.parties ?? existing.partyCodes.map((code) => ({
+    code,
+    nameKey: "",
+    isCustomer: true,
+    isVendor: true,
+  }))).map((party) => ({ ...party, code: party.code.toUpperCase() }));
+  const byCode = new Map(parties.map((party) => [party.code, party]));
+  const byName = new Map(parties.filter((party) => party.nameKey).map((party) => [party.nameKey, party]));
+  for (const key of existing.partyNames) {
+    if (!byName.has(key)) byName.set(key, { code: "", nameKey: key, isCustomer: true, isVendor: true });
+  }
   const result: (PreviewRow & { data: CustomerImport | null })[] = [];
+  const role = asVendor ? "vendor" : "customer";
   for (const [index, row] of rows.entries()) {
     const messages: string[] = [];
     const code = cleanCode(pick(row, "Customer ID", "Vendor ID", "ID", "Cust ID"));
     const name = pick(row, "Customer Name", "Vendor Name", "Name", "Company");
     const billState = pick(row, "Bill to State", "State").toUpperCase();
+    const known = code ? byCode.get(code) : undefined;
+    const otherName = name ? byName.get(nameKey(name)) : undefined;
     if (!code) messages.push("Every row needs an ID. A blank ID is how duplicate customers get into the books.");
     else if (!validCode(code)) messages.push(`ID “${code}” should use letters, numbers, and hyphens only.`);
-    else if (seenCodes.has(code)) messages.push(`ID ${code} is already used. Open that record instead of importing a second one.`);
-    if (!name) messages.push("Every row needs a name.");
-    else if (seenNames.has(nameKey(name))) {
+    if (!name && !known) messages.push("Every row needs a name.");
+    if (otherName && otherName.code && otherName.code !== code) {
       messages.push(`“${name}” matches a name already on file. SPIKE keeps one record per name.`);
     }
     if (!stateOk(billState)) messages.push("State must be two letters, such as FL.");
     const email = pick(row, "E-mail", "Email");
     if (email && !email.includes("@")) messages.push("That email address does not look usable.");
-    const status = messages.length ? "error" : "ok";
-    const data: CustomerImport | null =
-      status === "error"
-        ? null
-        : {
-            code,
-            name,
-            contactName: pick(row, "Contact", "Bill to Contact"),
-            email,
-            phone: pick(row, "Telephone 1", "Phone", "Telephone"),
-            billStreet: pick(row, "Bill to Address-Line One", "Address", "Bill to Address 1"),
-            billCity: pick(row, "Bill to City", "City"),
-            billState,
-            billZip: pick(row, "Bill to Zip", "Zip", "Postal Code"),
-            paymentTermsDays: 30,
-          };
-    if (data) {
-      seenCodes.add(code);
-      seenNames.add(nameKey(name));
+    const hasRole = known ? (asVendor ? known.isVendor : known.isCustomer) : false;
+    const terms = termsDays(pick(row, "Terms", "Payment Terms"));
+    const form1099 = infoReturnOf(pick(row, "1099", "Form 1099", "1099 Type"));
+    const leadRaw = pick(row, "Lead Time", "Lead time days");
+    const leadTimeDays = leadRaw && Number(leadRaw) > 0 ? Number(leadRaw) : null;
+    const fields = {
+      code,
+      name: name || known?.code || code,
+      contactName: pick(row, "Contact", "Bill to Contact"),
+      email,
+      phone: pick(row, "Telephone 1", "Phone", "Telephone"),
+      billStreet: pick(row, "Bill to Address-Line One", "Address", "Bill to Address 1"),
+      billCity: pick(row, "Bill to City", "City"),
+      billState,
+      billZip: pick(row, "Bill to Zip", "Zip", "Postal Code"),
+      paymentTermsDays: terms ?? 30,
+      leadTimeDays,
+      w9OnFile: form1099 != null,
+      infoReturn: form1099 ?? "NONE" as const,
+    };
+    let status: PreviewRow["status"] = messages.length ? "error" : "ok";
+    let data: CustomerImport | null = null;
+    if (known && hasRole && messages.length === 0) {
+      messages.push(`Already a ${role}. Left the record as it is.`);
+    } else if (known && !hasRole && messages.length === 0) {
+      status = "role added";
+      messages.push(`Role added. ${code} is now a customer and a vendor. Existing fields were kept.`);
+      data = { ...fields, action: "add-role" };
+      known.isCustomer = known.isCustomer || !asVendor;
+      known.isVendor = known.isVendor || asVendor;
+    } else if (messages.length === 0) {
+      data = { ...fields, action: "create" };
+      const created = { code, nameKey: nameKey(name), isCustomer: !asVendor, isVendor: asVendor };
+      byCode.set(code, created);
+      byName.set(nameKey(name), created);
     }
     result.push({
       rowNumber: index + 2,

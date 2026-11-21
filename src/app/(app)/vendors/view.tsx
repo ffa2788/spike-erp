@@ -25,7 +25,7 @@ export async function VendorsPage({
         <thead><tr><th>ID</th><th>Name</th><th>Lead time</th><th>City</th></tr></thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}><td><Link href={`/vendors/${row.id}`}>{row.code}</Link></td><td>{row.name}</td><td>{row.leadTimeDays ?? "—"} days</td><td>{row.billCity}</td></tr>
+            <tr key={row.id}><td><Link href={`/vendors/${row.id}`}>{row.code}</Link></td><td>{row.name}{row.isCustomer ? " · also a customer" : ""}</td><td>{row.leadTimeDays ?? "—"} days</td><td>{row.billCity}</td></tr>
           ))}
         </tbody>
       </table></div>

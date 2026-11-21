@@ -17,6 +17,7 @@ async function existingKeys(tx: Tx): Promise<ExistingKeys> {
   return {
     partyCodes: parties.map((party) => party.code),
     partyNames: parties.map((party) => party.nameKey),
+    parties: parties.map((party) => ({ code: party.code, nameKey: party.nameKey, isCustomer: party.isCustomer, isVendor: party.isVendor })),
     skus: products.map((product) => product.sku),
     productNames: products.map((product) => product.nameKey),
     accountCodes: accounts.map((account) => account.code),
@@ -41,6 +42,37 @@ export async function commitPeachtree(actor: Actor, csv: string, kind: string): 
     if (kind === "customers" || kind === "vendors") {
       const preview = validateCustomers(table.rows, keys, kind === "vendors");
       for (const row of preview.ready) {
+        if (row.action === "add-role") {
+          const current = await tx.party.findUnique({ where: { code: row.code } });
+          if (!current) return err(`ID ${row.code} was not found.`);
+          const keep = (currentValue: string, nextValue: string) => (currentValue.trim() ? currentValue : nextValue);
+          await tx.party.update({
+            where: { id: current.id },
+            data: {
+              isCustomer: current.isCustomer || kind === "customers",
+              isVendor: current.isVendor || kind === "vendors",
+              contactName: keep(current.contactName, row.contactName),
+              email: keep(current.email, row.email),
+              phone: keep(current.phone, row.phone),
+              billStreet: keep(current.billStreet, row.billStreet),
+              billCity: keep(current.billCity, row.billCity),
+              billState: keep(current.billState, row.billState),
+              billZip: keep(current.billZip, row.billZip),
+              shipStreet: keep(current.shipStreet, row.billStreet),
+              shipCity: keep(current.shipCity, row.billCity),
+              shipState: keep(current.shipState, row.billState),
+              shipZip: keep(current.shipZip, row.billZip),
+              paymentTermsDays: current.paymentTermsDays === 30 && row.paymentTermsDays !== 30 ? row.paymentTermsDays : current.paymentTermsDays,
+              leadTimeDays: current.leadTimeDays ?? row.leadTimeDays,
+              w9OnFile: current.w9OnFile || row.w9OnFile,
+              infoReturn: current.infoReturn === "NONE" ? row.infoReturn : current.infoReturn,
+            },
+          });
+          await tx.auditLog.create({
+            data: { userId: actor.id, userName: actor.name, action: "update", entity: "Party", entityId: current.id, summary: `Added the ${kind === "vendors" ? "vendor" : "customer"} role to ${current.code}.` },
+          });
+          continue;
+        }
         const saved = await savePartyTx(tx, actor, {
           code: row.code,
           name: row.name,

@@ -469,8 +469,13 @@ describe("imports and access", () => {
     const preview = validateCustomers(parsed.rows, emptyKeys, false);
     expect(preview.rows[0].status).toBe("ok");
     expect(preview.rows[1].status).toBe("error");
-    const again = validateCustomers(parsed.rows, { ...emptyKeys, partyCodes: ["PT-1"] }, false);
-    expect(again.rows[0].status).toBe("error");
+    const again = validateCustomers(parsed.rows, {
+      ...emptyKeys,
+      partyCodes: ["PT-1"],
+      parties: [{ code: "PT-1", nameKey: "palmetto water", isCustomer: true, isVendor: false }],
+    }, false);
+    expect(again.rows[0].status).toBe("ok");
+    expect(again.ready).toEqual([]);
   });
 
   it("blocks a one-dollar item price and an unbalanced journal", () => {
