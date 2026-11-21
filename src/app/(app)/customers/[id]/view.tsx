@@ -24,7 +24,7 @@ export async function CustomerPage({
   return (
     <>
       <h1>{party.name}</h1>
-      <p className="lede">{party.code} · owes {usd(open._sum.balanceCents ?? 0)}</p>
+      <p className="lede">{party.code} · owes {usd(open._sum.balanceCents ?? 0)}{party.isVendor ? " · also a supplier. What we owe them is on their bills, not here." : ""}</p>
       <Flash error={query.error} notice={query.notice} />
       <dl>
         <dt>Tax</dt><dd>{party.taxExempt ? `Exempt ${party.exemptionNumber}, expires ${formatDate(party.exemptionExpires)}` : `Taxable · ${party.taxLocality || "state only"}`}</dd>

@@ -104,12 +104,14 @@ export async function peachtreeAction(_prev: PeachtreeState, formData: FormData)
     if (!result.ok) return { kind, csv, ready: 0, skipped: 0, rows: [], error: result.error };
     return { kind, csv: "", ready: result.value.saved, skipped: result.value.skipped, rows: [], notice: `Imported ${result.value.saved} rows. Skipped ${result.value.skipped}.` };
   }
+  const [parties, products, accounts] = await Promise.all([prisma.party.findMany(), prisma.product.findMany(), prisma.account.findMany()]);
   const keys = {
-    partyCodes: (await prisma.party.findMany()).map((party) => party.code),
-    partyNames: (await prisma.party.findMany()).map((party) => party.nameKey),
-    skus: (await prisma.product.findMany()).map((product) => product.sku),
-    productNames: (await prisma.product.findMany()).map((product) => product.nameKey),
-    accountCodes: (await prisma.account.findMany()).map((account) => account.code),
+    partyCodes: parties.map((party) => party.code),
+    partyNames: parties.map((party) => party.nameKey),
+    parties: parties.map((party) => ({ code: party.code, nameKey: party.nameKey, isCustomer: party.isCustomer, isVendor: party.isVendor })),
+    skus: products.map((product) => product.sku),
+    productNames: products.map((product) => product.nameKey),
+    accountCodes: accounts.map((account) => account.code),
   };
   const preview = kind === "customers" || kind === "vendors"
     ? validateCustomers(table.rows, keys, kind === "vendors")
@@ -135,6 +137,7 @@ export type BundleState = {
   okRows: number;
   files: { name: string; kind: string; detected: string; csv: string; ready: number }[];
   errors: { file: string; rowNumber: number; summary: string; messages: string[] }[];
+  roles: { file: string; rowNumber: number; summary: string; messages: string[] }[];
   checks: TieCheck[];
 };
 
@@ -148,12 +151,13 @@ async function uploads(formData: FormData) {
 export async function previewBundleAction(formData: FormData): Promise<BundleState> {
   await requireCan("importData");
   const files = await uploads(formData);
-  if (!files.length) return { error: "Drop at least one file.", okRows: 0, files: [], errors: [], checks: [] };
+  if (!files.length) return { error: "Drop at least one file.", okRows: 0, files: [], errors: [], roles: [], checks: [] };
   const preview = await describeBundle(files);
   return {
     okRows: preview.okRows,
     files: preview.files.map((file) => ({ name: file.name, kind: file.kind, detected: file.detected, csv: file.csv, ready: file.ready })),
     errors: preview.errorRows.map((row) => ({ file: row.file, rowNumber: row.rowNumber, summary: row.summary, messages: row.messages })),
+    roles: preview.roleRows.map((row) => ({ file: row.file, rowNumber: row.rowNumber, summary: row.summary, messages: row.messages })),
     checks: preview.checks,
   };
 }
@@ -162,6 +166,6 @@ export async function commitBundleAction(formData: FormData): Promise<BundleStat
   const actor = await requireCan("importData");
   const files = filesFromForm(formData);
   const result = await commitBundle(actor, files);
-  if (!result.ok) return { error: result.error, okRows: 0, files: [], errors: [], checks: [] };
-  return { notice: result.value.notes.join(" "), okRows: result.value.saved, files: [], errors: [], checks: [] };
+  if (!result.ok) return { error: result.error, okRows: 0, files: [], errors: [], roles: [], checks: [] };
+  return { notice: result.value.notes.join(" "), okRows: result.value.saved, files: [], errors: [], roles: [], checks: [] };
 }

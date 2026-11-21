@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       okRows: preview.okRows,
       files: preview.files.map((file) => ({ name: file.name, kind: file.kind, ready: file.ready })),
       errors: preview.errorRows,
+      roles: preview.roleRows,
       checks: preview.checks,
     });
   }

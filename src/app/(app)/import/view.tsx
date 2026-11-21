@@ -73,7 +73,22 @@ export function ImportPage() {
               ))}
             </tbody>
           </table></div>
-          <p>{bundle.okRows} rows are ready. {bundle.errors.length} rows have errors.</p>
+          <p>{bundle.okRows} rows are ready. {bundle.roles.length} roles added. {bundle.errors.length} rows have errors.</p>
+          {bundle.roles.length > 0 && (
+            <div className="wrap"><table>
+              <thead><tr><th>File</th><th>Row</th><th>Company</th><th>Notes</th></tr></thead>
+              <tbody>
+                {bundle.roles.map((row) => (
+                  <tr key={`role-${row.file}-${row.rowNumber}`}>
+                    <td>{row.file}</td>
+                    <td>{row.rowNumber}</td>
+                    <td>{row.summary}</td>
+                    <td>Role added</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          )}
           {bundle.errors.length > 0 && (
             <div className="wrap"><table>
               <thead><tr><th>File</th><th>Row</th><th>What SPIKE read</th><th>Notes</th></tr></thead>

@@ -13,8 +13,10 @@ export const openApi = {
   paths: {
     "/search": { get: { summary: "Search customers, products, invoices, and quotes", parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }] } },
     "/dashboard": { get: { summary: "Cash, receivables, payables, inventory, and alerts" } },
-    "/customers": { get: { summary: "List customers", parameters: [{ name: "q", in: "query", schema: { type: "string" } }] } },
+    "/customers": { get: { summary: "List customers, including companies that are also vendors", parameters: [{ name: "q", in: "query", schema: { type: "string" } }] } },
     "/customers/{id}": { get: { summary: "Get one customer" } },
+    "/vendors": { get: { summary: "List vendors, including companies that are also customers", parameters: [{ name: "q", in: "query", schema: { type: "string" } }] } },
+    "/vendors/{id}": { get: { summary: "Get one vendor" } },
     "/products": { get: { summary: "List products" } },
     "/products/{id}": { get: { summary: "Get one product" } },
     "/inventory": { get: { summary: "On-hand by product and lot" } },

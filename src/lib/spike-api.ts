@@ -80,6 +80,8 @@ async function route(method: string, parts: string[], query: Query, body: unknow
   if (method === "GET" && head === "dashboard") return dashboard();
   if (method === "GET" && head === "customers" && !id) return listCustomers(query.q ?? "");
   if (method === "GET" && head === "customers" && id) return getCustomer(id);
+  if (method === "GET" && head === "vendors" && !id) return listVendors(query.q ?? "");
+  if (method === "GET" && head === "vendors" && id) return getVendor(id);
   if (method === "GET" && head === "products" && !id) return listProducts(query.q ?? "");
   if (method === "GET" && head === "products" && id) return getProduct(id);
   if (method === "GET" && head === "inventory") return inventory();
@@ -224,8 +226,26 @@ async function getCustomer(id: string) {
   return { status: 200, body: { customer: customerJson(row) } };
 }
 
-function customerJson(row: { id: string; code: string; name: string; email: string; phone: string; channel: string; paymentTermsDays: number }) {
-  return { id: row.id, code: row.code, name: row.name, email: row.email, phone: row.phone, channel: row.channel, paymentTermsDays: row.paymentTermsDays };
+function customerJson(row: { id: string; code: string; name: string; email: string; phone: string; channel: string; paymentTermsDays: number; isCustomer: boolean; isVendor: boolean }) {
+  return { id: row.id, code: row.code, name: row.name, email: row.email, phone: row.phone, channel: row.channel, paymentTermsDays: row.paymentTermsDays, isCustomer: row.isCustomer, isVendor: row.isVendor };
+}
+
+async function listVendors(q: string) {
+  const rows = await prisma.party.findMany({
+    where: {
+      isVendor: true,
+      ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}),
+    },
+    orderBy: { name: "asc" },
+    take: 50,
+  });
+  return { status: 200, body: { vendors: rows.map(customerJson) } };
+}
+
+async function getVendor(id: string) {
+  const row = await prisma.party.findUnique({ where: { id } });
+  if (!row?.isVendor) return { status: 404, body: { error: "Vendor not found." } };
+  return { status: 200, body: { vendor: customerJson(row) } };
 }
 
 async function listProducts(q: string) {
