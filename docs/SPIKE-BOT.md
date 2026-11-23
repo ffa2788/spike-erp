@@ -21,7 +21,7 @@ The answer shows in that person's Help panel, with a badge on the Help button. O
 
 ## Cutover import
 
-`POST /api/v1/imports` takes multipart field `files` (one or more CSV or XLSX files). Add `dryRun=true` as a form field or query to preview without saving. SPIKE detects each file from its headers, sorts them in the go-live order, and returns the ready rows, the named errors, and the tie-out checks. Without `dryRun`, it posts each file in its own transaction. Sending the same files again does not create duplicates. The key needs `sales` or `import`.
+`POST /api/v1/imports` takes multipart field `files` (one or more CSV or XLSX files). Add `dryRun=true` as a form field or query to preview without saving. SPIKE detects each file from its headers, sorts them in the go-live order, and returns the ready rows, the named errors, and the tie-out checks. For an opening trial balance or stock count, send `asOf` as `YYYY-MM-DD` (or put `As of October 31, 2026` above the column headers). That date is the journal date and the stock lot date. A future date is rejected. Without `dryRun`, it posts each file in its own transaction. Sending the same files again does not create duplicates. The key needs `sales` or `import`.
 
 ## Amazon reports
 

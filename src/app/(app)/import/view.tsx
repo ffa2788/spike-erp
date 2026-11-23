@@ -118,6 +118,11 @@ export function ImportPage() {
                 <input type="hidden" name="csv" value={file.csv} />
               </span>
             ))}
+            {bundle.files.some((file) => file.kind === "stock" || file.kind === "trial") && (
+              <label className="field">As-of date for the opening trial balance and stock count
+                <input type="date" name="asOf" required key={bundle.asOf || "choose"} defaultValue={bundle.asOf} />
+              </label>
+            )}
             <button className="btn" type="submit" disabled={busy || bundle.files.every((file) => !file.kind)}>Confirm and import</button>
           </form>
         </>
@@ -147,6 +152,9 @@ export function ImportPage() {
         </label>
         <label className="field">File<input type="file" name="file" accept=".csv,text/csv" /></label>
         <label className="field">Or paste<textarea name="csv" defaultValue={state.csv ?? ""} /></label>
+        <label className="field">As-of date (opening trial balance and stock count)
+          <input type="date" name="asOf" key={state.asOf || "one-asof"} defaultValue={state.asOf ?? ""} />
+        </label>
         <button className="btn" type="submit" disabled={pending}>Preview</button>
         {state.rows.length > 0 && state.kind !== "amazon" && state.kind !== "walmart" && (
           <button className="btn secondary" type="submit" name="commit" value="yes">Import {state.ready} good rows</button>

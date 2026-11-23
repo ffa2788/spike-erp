@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { toDateInput } from "@/lib/dates";
 import { assessBooks } from "@/lib/read-models";
 import { wipeDatabase } from "@/lib/seed-demo";
 import { commitGolive } from "@/lib/services/golive-import";
@@ -40,10 +41,11 @@ describe("cutover from Peachtree", () => {
     const fin = await prisma.product.findUniqueOrThrow({ where: { sku: "FIN-1" } });
     await prisma.amazonSkuMap.create({ data: { amazonSku: "FIN-1", asin: "B000TEST", productId: fin.id } });
     must(await commitGolive(who, "Finished SKU,Ingredient SKU,Percent\nFIN-1,RAW-1,100\n", "formula"), "formula");
-    must(await commitGolive(who, "Item ID,Quantity,Unit Cost,Lot Number\nRAW-1,10,2.00,OPEN-RAW-1\nFIN-1,2,5.00,OPEN-FIN-1\n", "stock"), "stock");
+    must(await commitGolive(who, "Item ID,Quantity,Unit Cost,Lot Number\nRAW-1,10,2.00,OPEN-RAW-1\nFIN-1,2,5.00,OPEN-FIN-1\n", "stock", "2026-10-31"), "stock");
     must(await commitGolive(who, "Customer ID,Invoice Number,Date,Amount\nCUT-1,PT-1001,11/01/2026,100.00\n", "ar"), "ar");
     must(await commitGolive(who, "Vendor ID,Bill Number,Date,Amount\nSUP-1,V-55,11/01/2026,50.00\n", "ap"), "ap");
     must(await commitGolive(who, [
+      "As of October 31, 2026",
       "Account ID,Debit,Credit",
       "1000,1000.00,",
       "1100,100.00,",
@@ -52,6 +54,12 @@ describe("cutover from Peachtree", () => {
       "2000,,50.00",
       "3900,,1080.00",
     ].join("\n"), "trial"), "trial");
+    const openingJournal = await prisma.journalEntry.findFirstOrThrow({ where: { source: "OPENING", sourceId: "TRIAL" } });
+    expect(toDateInput(openingJournal.date)).toBe("2026-10-31");
+    const openingLot = await prisma.lot.findUniqueOrThrow({ where: { lotNumber: "OPEN-RAW-1" } });
+    expect(toDateInput(openingLot.receivedOn!)).toBe("2026-10-31");
+    const openingMove = await prisma.movement.findFirstOrThrow({ where: { lotId: openingLot.id, reason: "OPENING" } });
+    expect(toDateInput(openingMove.at)).toBe("2026-10-31");
     const again = must(await commitGolive(who, "Item ID,Quantity,Unit Cost,Lot Number\nRAW-1,10,2.00,OPEN-RAW-1\n", "stock"), "stock again");
     expect(again.saved).toBe(0);
     const trialAgain = must(await commitGolive(who, "Account ID,Debit,Credit\n1000,1.00,\n3900,,1.00\n", "trial"), "trial again");
