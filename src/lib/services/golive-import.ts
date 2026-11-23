@@ -2,6 +2,7 @@ import { parseDateInput } from "../dates";
 import { parseCsv } from "../csv";
 import { CODES } from "../chart";
 import { validateBoms, validateFormulas, validateOpenAp, validateOpenAr, validateStock, validateTrial, type GoliveExisting } from "../golive";
+import { resolveOpeningDate, withoutPreamble } from "../opening-date";
 import { err, ok, type Result } from "../result";
 import { postJournal, run, type Actor, type Tx } from "./shared";
 
@@ -50,13 +51,18 @@ async function openingProduct(tx: Tx) {
   });
 }
 
-export async function commitGolive(actor: Actor, csv: string, kind: string): Promise<Result<{ saved: number; skipped: number }>> {
+export async function commitGolive(actor: Actor, csv: string, kind: string, asOf?: string | null): Promise<Result<{ saved: number; skipped: number }>> {
   if (actor.role !== "OWNER" && actor.role !== "PARTNER") return err("Your role cannot do that.");
-  const table = parseCsv(csv);
+  const table = parseCsv(withoutPreamble(csv));
   return run(async (tx) => {
     const existing = await keys(tx);
     if (kind === "stock") {
       const preview = validateStock(table.rows, existing);
+      if (preview.ready.length === 0) return ok({ saved: 0, skipped: preview.rows.length });
+      const dated = resolveOpeningDate({ asOf, files: [csv] });
+      if (!dated.ok) return err(dated.error);
+      const date = parseDateInput(dated.date);
+      if (!date) return err("The as-of date must look like 2026-10-31.");
       const main = await tx.location.findUnique({ where: { code: "MAIN" } });
       if (!main) return err("The main warehouse is not set up yet.");
       let saved = 0;
@@ -64,7 +70,6 @@ export async function commitGolive(actor: Actor, csv: string, kind: string): Pro
         if (await tx.lot.findUnique({ where: { lotNumber: row.lotNumber } })) continue;
         const product = await tx.product.findUnique({ where: { sku: row.sku } });
         if (!product?.trackInventory) return err(`${row.sku} is not a stocked item.`);
-        const date = new Date();
         const lot = await tx.lot.create({
           data: {
             lotNumber: row.lotNumber,
@@ -79,7 +84,7 @@ export async function commitGolive(actor: Actor, csv: string, kind: string): Pro
           },
         });
         await tx.movement.create({
-          data: { lotId: lot.id, productId: product.id, locationId: main.id, qty: row.qty, reason: "OPENING", refType: "Opening", refId: lot.id },
+          data: { lotId: lot.id, productId: product.id, locationId: main.id, qty: row.qty, reason: "OPENING", refType: "Opening", refId: lot.id, at: date },
         });
         saved += 1;
       }
@@ -151,8 +156,12 @@ export async function commitGolive(actor: Actor, csv: string, kind: string): Pro
       const preview = validateTrial(table.rows, existing);
       if (existing.trialPosted) return ok({ saved: 0, skipped: table.rows.length });
       if (preview.ready.length < 2) return err(preview.rows.find((row) => row.messages.length)?.messages[0] ?? "The trial balance is not ready.");
+      const dated = resolveOpeningDate({ asOf, files: [csv] });
+      if (!dated.ok) return err(dated.error);
+      const date = parseDateInput(dated.date);
+      if (!date) return err("The as-of date must look like 2026-10-31.");
       const posted = await postJournal(tx, actor, {
-        date: new Date(),
+        date,
         memo: "Opening trial balance",
         source: "OPENING",
         sourceId: "TRIAL",

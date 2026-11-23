@@ -1,5 +1,6 @@
 import { auditSpike, authenticateApiKey } from "@/lib/spike-api";
 import { canImport } from "@/lib/spike-auth";
+import { resolveOpeningDate } from "@/lib/opening-date";
 import { commitBundle, describeBundle, textOfUpload } from "@/lib/services/import-bundle";
 import { SPIKE_BOT } from "@/lib/spike-api";
 
@@ -19,20 +20,26 @@ export async function POST(request: Request) {
   const dry = form.get("dryRun") === "true" || new URL(request.url).searchParams.get("dryRun") === "true";
   const uploads = form.getAll("files").filter((item): item is File => item instanceof File && item.size > 0);
   if (!uploads.length) return Response.json({ error: "Send one or more files in the files field." }, { status: 400 });
+  const asOf = String(form.get("asOf") ?? "");
   const files = await Promise.all(uploads.map(async (file) => ({ name: file.name, csv: await textOfUpload(file), kind: "" })));
   const preview = await describeBundle(files);
+  const needsDate = preview.files.some((file) => file.kind === "stock" || file.kind === "trial");
+  const dated = needsDate ? resolveOpeningDate({ asOf: asOf || preview.asOf, files: files.map((file) => file.csv) }) : null;
   if (dry) {
     await auditSpike("imports", 200, `Dry run of ${files.length} import file(s).`);
     return Response.json({
       dryRun: true,
       okRows: preview.okRows,
+      asOf: dated && dated.ok ? dated.date : preview.asOf || null,
+      asOfError: dated && !dated.ok ? dated.error : null,
       files: preview.files.map((file) => ({ name: file.name, kind: file.kind, ready: file.ready })),
       errors: preview.errorRows,
       roles: preview.roleRows,
       checks: preview.checks,
     });
   }
-  const result = await commitBundle(SPIKE_BOT, preview.files.map((file) => ({ name: file.name, csv: file.csv, kind: file.kind })));
+  if (dated && !dated.ok) return Response.json({ error: dated.error, checks: preview.checks }, { status: 422 });
+  const result = await commitBundle(SPIKE_BOT, preview.files.map((file) => ({ name: file.name, csv: file.csv, kind: file.kind })), dated && dated.ok ? dated.date : asOf);
   await auditSpike("imports", result.ok ? 200 : 422, result.ok ? `Imported ${result.value.saved} cutover rows.` : result.error);
   if (!result.ok) return Response.json({ error: result.error, checks: preview.checks }, { status: 422 });
   return Response.json({ saved: result.value.saved, notes: result.value.notes, checks: preview.checks });

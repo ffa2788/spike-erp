@@ -2,6 +2,7 @@ import { parseCsv } from "../csv";
 import { prisma } from "../db";
 import type { GoliveExisting } from "../golive";
 import { detectImportKind, previewBundle, sortImportFiles, type ImportFile } from "../import-bundle";
+import { resolveOpeningDate, suggestedAsOf, withoutPreamble } from "../opening-date";
 import { xlsxToCsv } from "../xlsx-csv";
 import type { ExistingKeys } from "../peachtree";
 import { err, ok, type Result } from "../result";
@@ -59,20 +60,32 @@ export function filesFromForm(formData: FormData): { name: string; csv: string; 
 
 export async function describeBundle(files: ImportFile[]) {
   const ready = files.map((file) => {
-    const headers = parseCsv(file.csv).headers;
+    const csv = withoutPreamble(file.csv);
+    const headers = parseCsv(csv).headers;
     const detected = detectImportKind(headers);
-    return { ...file, kind: file.kind || detected };
+    return { name: file.name, csv, source: file.csv, kind: file.kind || detected };
   });
-  return previewBundle(sortImportFiles(ready), await bundleContext());
+  const preview = previewBundle(
+    sortImportFiles(ready.map((file) => ({ name: file.name, csv: file.csv, kind: file.kind }))),
+    await bundleContext(),
+  );
+  return { ...preview, asOf: suggestedAsOf(ready.map((file) => ({ kind: file.kind, csv: file.source }))) };
 }
 
-export async function commitBundle(actor: Actor, files: ImportFile[]): Promise<Result<{ saved: number; notes: string[] }>> {
+export async function commitBundle(actor: Actor, files: ImportFile[], asOf?: string | null): Promise<Result<{ saved: number; notes: string[] }>> {
   if (actor.role !== "OWNER" && actor.role !== "PARTNER") return err("Your role cannot do that.");
   const ordered = sortImportFiles(files.filter((file) => file.csv.trim() && file.kind));
+  const opening = ordered.filter((file) => file.kind === "stock" || file.kind === "trial");
+  let openingDate: string | null = null;
+  if (opening.length) {
+    const dated = resolveOpeningDate({ asOf, files: opening.map((file) => file.csv) });
+    if (!dated.ok) return err(dated.error);
+    openingDate = dated.date;
+  }
   let saved = 0;
   const notes: string[] = [];
   for (const file of ordered) {
-    const result = await commitOne(actor, file);
+    const result = await commitOne(actor, { ...file, csv: withoutPreamble(file.csv) }, openingDate);
     if (!result.ok) return err(`${file.name}: ${result.error} ${saved} earlier file(s) were saved.`);
     saved += result.value.saved;
     notes.push(`${file.name}: saved ${result.value.saved}, skipped ${result.value.skipped}.`);
@@ -80,12 +93,12 @@ export async function commitBundle(actor: Actor, files: ImportFile[]): Promise<R
   return ok({ saved, notes });
 }
 
-async function commitOne(actor: Actor, file: ImportFile): Promise<Result<{ saved: number; skipped: number }>> {
+async function commitOne(actor: Actor, file: ImportFile, openingDate: string | null): Promise<Result<{ saved: number; skipped: number }>> {
   if (file.kind === "amazon" || file.kind === "walmart") {
     const result = await commitMarketplace(actor, file.csv, file.kind === "walmart" ? "WALMART" : "AMAZON");
     if (!result.ok) return result;
     return ok({ saved: result.value.invoices, skipped: 0 });
   }
-  if (["stock", "ar", "ap", "trial", "formula", "bom"].includes(file.kind)) return commitGolive(actor, file.csv, file.kind);
+  if (["stock", "ar", "ap", "trial", "formula", "bom"].includes(file.kind)) return commitGolive(actor, file.csv, file.kind, openingDate);
   return commitPeachtree(actor, file.csv, file.kind);
 }
