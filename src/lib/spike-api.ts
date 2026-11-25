@@ -13,6 +13,7 @@ import { shippedManual } from "./manual-source";
 import { keysMatch, scopeAllows, type SpikeScope } from "./spike-auth";
 import { buildPlan } from "./services/mrp-run";
 import { buildSchedule, emailSchedule, releaseSchedule } from "./services/schedule-run";
+import { saveAmazonSkuMaps } from "./services/amazon-import";
 import { savePurchaseOrder } from "./services/purchasing";
 import { acceptQuote, invoiceDelivery, payInvoice, saveQuote, shipOrder } from "./services/sales";
 import type { Actor } from "./services/shared";
@@ -100,10 +101,26 @@ async function route(method: string, parts: string[], query: Query, body: unknow
   if (method === "GET" && head === "work-lists" && id && action === "pdf") return workListPdf(id);
   if (method === "POST" && head === "payments") return payment(body);
   if (method === "POST" && head === "production-plans" && id === "release") return releasePlan(body);
+  if (method === "POST" && head === "amazon" && id === "sku-maps") return saveSkuMaps(body);
   if (method === "POST" && head === "messages" && !id) return draftMessage(body);
   if (method === "GET" && head === "messages" && id && !action) return getDraft(id);
   if (method === "POST" && head === "messages" && id && action === "confirm") return confirmDraft(id);
   return { status: 404, body: { error: "No such API path. See /api/openapi.json." } };
+}
+
+async function saveSkuMaps(body: unknown): Promise<SpikeResult> {
+  const record = asRecord(body);
+  const listed = Array.isArray(record.mappings) ? record.mappings : [record];
+  const mappings = listed.flatMap((item) => {
+    const row = asRecord(item);
+    const amazonSku = text(row, "amazonSku");
+    const productId = text(row, "productId");
+    if (!amazonSku && !productId) return [];
+    return [{ amazonSku, productId, asin: text(row, "asin") }];
+  });
+  const saved = await saveAmazonSkuMaps({ mappings, dryRun: record.dryRun === true });
+  if (!saved.ok) return { status: 400, body: { error: saved.error } };
+  return { status: 200, body: saved.value };
 }
 
 function asRecord(body: unknown): Record<string, unknown> {

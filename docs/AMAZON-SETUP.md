@@ -34,6 +34,55 @@ One file at a time also works: `-F "kind=orders" -F "file=@all-orders.txt"` (`or
 
 The response is the summary: invoices created, refunds, fees, and the deposit. Uploading the same file again does not create a second invoice or a second deposit.
 
+Add `dryRun=true` to preview. The response lists the invoices that would be created, one per Amazon order, the SKUs that still need a product, any exact SKU matches that are not saved yet, the fees and deposit from the payments file, and the FBA levels. Nothing is written.
+
+```bash
+curl -X POST https://YOUR-HOST/api/amazon/import \
+  -H "Authorization: Bearer spike_..." \
+  -F "dryRun=true" \
+  -F "orders=@all-orders.txt" \
+  -F "fba=@fba.csv"
+```
+
+Map a SKU only when you know the product ID. A dry run checks the IDs and writes nothing. An unknown product ID is rejected.
+
+```bash
+curl -X POST https://YOUR-HOST/api/v1/amazon/sku-maps \
+  -H "Authorization: Bearer spike_..." \
+  -H "Content-Type: application/json" \
+  -d '{"dryRun":true,"mappings":[{"amazonSku":"SC-RP1-1.0-1","productId":"PRODUCT_ID"}]}'
+```
+
+SPIKE auto-maps a line only when the Amazon seller SKU is the same as a product SKU, ignoring case and spaces at the ends. A space in the middle is kept, so `SC-RP1-1.0-1 -FBA` is not `SC-RP1-1.0-1`. A similar name is not a match. Do not create a product for the 0.5 gal Rust Preventer until FFA decides.
+
+## The Amazon customer
+
+Every A- invoice uses the one customer whose channel is AMAZON. If that customer is still DIRECT, set the channel from your own machine. This does not run during import.
+
+`DATABASE_URL` and `DIRECT_URL` must already be set. Do not put the connection string in the command.
+
+The Amazon customer is `AMAZON-SALES`. Deploy sets that customer's channel to AMAZON when no other customer already has it. The same change can be checked by hand:
+
+```
+npx tsx scripts/set-amazon-customer.ts
+npx tsx scripts/set-amazon-customer.ts --apply
+```
+
+With no `--customer`, the script uses `AMAZON-SALES`. The first command prints the change. `--apply` writes it. It refuses if a different customer is already the Amazon channel. Running it again changes nothing.
+
+`SC-PR1-1-2PK` is a case of two of `RUST-PREVENTER-1` (the 1 gal). One Amazon unit invoices two of that product. Deploy adds the mapping when `RUST-PREVENTER-1` is already on file.
+
+## 0.5 gal packs
+
+The 2-pack and the 4-pack are presentations of `RUST-PREVENTER-1`: the same formula, filled into a 0.5 gal jug. The jug SKU, the jug cost, and the two presentation SKUs are not set. Fill them in `src/lib/rust-preventer-packs.ts` (`halfGallonJug.sku`, `halfGallonJug.costDollars`, `halfGallonPackSkus.twoPack`, `halfGallonPackSkus.fourPack`). Then:
+
+```
+npx tsx scripts/add-rust-half-gallon.ts
+npx tsx scripts/add-rust-half-gallon.ts --apply
+```
+
+Until those four values are filled in, the script writes nothing.
+
 Cross-check a month or a settlement id:
 
 ```bash

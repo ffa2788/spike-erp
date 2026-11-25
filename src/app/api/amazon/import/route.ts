@@ -1,6 +1,6 @@
 import { scopeAllows } from "@/lib/spike-auth";
 import { auditSpike, authenticateApiKey, SPIKE_BOT } from "@/lib/spike-api";
-import { importAmazonReports } from "@/lib/services/amazon-report-import";
+import { importAmazonReports, previewAmazonReports } from "@/lib/services/amazon-report-import";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +23,20 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const kind = String(form.get("kind") ?? "").toLowerCase();
   const file = await textOf(form.get("file"));
-  const result = await importAmazonReports(SPIKE_BOT, {
+  const files = {
     orders: (await textOf(form.get("orders"))) || (kind === "orders" ? file : ""),
     payments: (await textOf(form.get("payments"))) || (kind === "payments" ? file : ""),
     settlement: (await textOf(form.get("settlement"))) || (kind === "settlement" ? file : ""),
     fba: (await textOf(form.get("fba"))) || (kind === "fba" ? file : ""),
-  });
+  };
+  const dry = form.get("dryRun") === "true" || new URL(request.url).searchParams.get("dryRun") === "true";
+  if (dry) {
+    const preview = await previewAmazonReports(files);
+    await auditSpike("amazon/import", preview.ok ? 200 : 400, preview.ok ? "Dry run of Amazon reports." : preview.error);
+    if (!preview.ok) return Response.json({ error: preview.error }, { status: 400 });
+    return Response.json(preview.value);
+  }
+  const result = await importAmazonReports(SPIKE_BOT, files);
   await auditSpike("amazon/import", result.ok ? 200 : 400, result.ok ? result.value.sentence : result.error);
   if (!result.ok) return Response.json({ error: result.error }, { status: 400 });
   return Response.json(result.value);

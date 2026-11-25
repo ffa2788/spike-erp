@@ -278,6 +278,32 @@ export function dedupePayments(rows: PaymentRow[]): { kept: PaymentRow[]; duplic
   return { kept, duplicates };
 }
 
+const FEE_TYPES = new Set(["shipping services", "service fee", "fba inventory fee", "fba transaction fees", "adjustment"]);
+const REFUND_TYPES = new Set(["refund", "chargeback refund"]);
+
+/** The fee, refund, and deposit totals a payments file would post. No rows are written. */
+export function paymentImportTotals(rows: PaymentRow[]): { feeCents: number; refunds: number; reimbursements: number; transferCents: number; transfers: number } {
+  let feeCents = 0;
+  let refunds = 0;
+  let reimbursements = 0;
+  let transferCents = 0;
+  let transfers = 0;
+  for (const row of rows) {
+    const type = row.type.trim().toLowerCase();
+    if (type === "transfer") {
+      transfers += 1;
+      transferCents += -row.totalCents;
+      continue;
+    }
+    if (type === "order") continue;
+    const effect = row.totalCents !== 0 ? row.totalCents : row.sellingFeeCents + row.fbaFeeCents + row.otherTransactionFeeCents + row.otherCents + row.promotionalRebatesCents + row.productSalesCents;
+    if (REFUND_TYPES.has(type)) refunds += 1;
+    else if (type === "adjustment" && effect > 0) reimbursements += 1;
+    else if (FEE_TYPES.has(type)) feeCents += Math.abs(effect);
+  }
+  return { feeCents, refunds, reimbursements, transferCents, transfers };
+}
+
 function feeParts(row: PaymentRow): number {
   return row.sellingFeeCents + row.fbaFeeCents + row.otherTransactionFeeCents + row.otherCents + row.promotionalRebatesCents;
 }
