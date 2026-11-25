@@ -1,4 +1,4 @@
-import { dedupeOrders, orderImportSummary, parseAllOrders, parseFbaManageInventory, suggestAmazonSku } from "../amazon-reports";
+import { dedupeOrders, orderImportSummary, parseAllOrders, parseFbaManageInventory, planSkuMaps, suggestAmazonSku } from "../amazon-reports";
 import { parseDateInput } from "../dates";
 import { prisma } from "../db";
 import { err, ok, type Result } from "../result";
@@ -126,7 +126,12 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
 }
 
 export async function importFbaFile(text: string): Promise<Result<{ rowsRead: number; saved: number; unmapped: { sku: string; asin: string; suggestion: string }[] }>> {
-  const rows = parseFbaManageInventory(text);
+  let rows;
+  try {
+    rows = parseFbaManageInventory(text);
+  } catch (error) {
+    return err(error instanceof Error ? error.message : "The FBA file could not be read.");
+  }
   const products = await prisma.product.findMany({ where: { active: true } });
   const maps = await prisma.amazonSkuMap.findMany();
   const mapBySku = new Map(maps.filter((row) => row.productId).map((row) => [row.amazonSku, row.productId!]));
@@ -175,6 +180,28 @@ export async function importFbaFile(text: string): Promise<Result<{ rowsRead: nu
     saved += 1;
   }
   return ok({ rowsRead: rows.length, saved, unmapped });
+}
+
+export async function saveAmazonSkuMaps(input: {
+  mappings: { amazonSku: string; productId: string; asin?: string }[];
+  dryRun: boolean;
+}): Promise<Result<{ dryRun: boolean; changes: { amazonSku: string; productId: string; productSku: string; action: "create" | "update" | "same" }[] }>> {
+  const products = await prisma.product.findMany({ select: { id: true, sku: true } });
+  const existing = await prisma.amazonSkuMap.findMany();
+  const planned = planSkuMaps({ mappings: input.mappings, products, existing });
+  if (!planned.ok) return planned;
+  const changes = planned.changes;
+  if (input.dryRun) return ok({ dryRun: true, changes });
+  for (const change of changes) {
+    const asin = input.mappings.find((row) => row.amazonSku.trim() === change.amazonSku)?.asin?.trim() ?? "";
+    await prisma.amazonSkuMap.upsert({
+      where: { amazonSku: change.amazonSku },
+      update: { productId: change.productId, ...(asin ? { asin } : {}) },
+      create: { amazonSku: change.amazonSku, asin, productId: change.productId },
+    });
+    await prisma.amazonOrderItem.updateMany({ where: { sku: change.amazonSku, productId: null }, data: { productId: change.productId } });
+  }
+  return ok({ dryRun: false, changes });
 }
 
 export async function saveAmazonSkuMap(amazonSku: string, productId: string) {

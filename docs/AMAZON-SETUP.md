@@ -34,6 +34,40 @@ One file at a time also works: `-F "kind=orders" -F "file=@all-orders.txt"` (`or
 
 The response is the summary: invoices created, refunds, fees, and the deposit. Uploading the same file again does not create a second invoice or a second deposit.
 
+Add `dryRun=true` to preview. The response lists the invoices that would be created, one per Amazon order, the SKUs that still need a product, any exact SKU matches that are not saved yet, the fees and deposit from the payments file, and the FBA levels. Nothing is written.
+
+```bash
+curl -X POST https://YOUR-HOST/api/amazon/import \
+  -H "Authorization: Bearer spike_..." \
+  -F "dryRun=true" \
+  -F "orders=@all-orders.txt" \
+  -F "fba=@fba.csv"
+```
+
+Map a SKU only when you know the product ID. A dry run checks the IDs and writes nothing. An unknown product ID is rejected.
+
+```bash
+curl -X POST https://YOUR-HOST/api/v1/amazon/sku-maps \
+  -H "Authorization: Bearer spike_..." \
+  -H "Content-Type: application/json" \
+  -d '{"dryRun":true,"mappings":[{"amazonSku":"SC-RP1-1.0-1","productId":"PRODUCT_ID"}]}'
+```
+
+SPIKE auto-maps a line only when the Amazon seller SKU is the same as a product SKU, ignoring case and spaces at the ends. A space in the middle is kept, so `SC-RP1-1.0-1 -FBA` is not `SC-RP1-1.0-1`. A similar name is not a match. Do not create a product for the 0.5 gal Rust Preventer until FFA decides.
+
+## The Amazon customer
+
+Every A- invoice uses the one customer whose channel is AMAZON. If that customer is still DIRECT, set the channel from your own machine. This does not run during import.
+
+`DATABASE_URL` and `DIRECT_URL` must already be set. Do not put the connection string in the command.
+
+```
+npx tsx scripts/set-amazon-customer.ts --customer=AMAZON-SALES
+npx tsx scripts/set-amazon-customer.ts --customer=AMAZON-SALES --apply
+```
+
+The first command prints the customer and the channel change. `--apply` writes it. The script refuses if a different customer is already the Amazon channel. Running it again after a successful apply changes nothing. `--customer` is the customer ID, such as `AMAZON-SALES` or `AMAZON-FULFILLMENT`. Pick one.
+
 Cross-check a month or a settlement id:
 
 ```bash

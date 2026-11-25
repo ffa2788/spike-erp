@@ -23,6 +23,10 @@ describe("a sample Amazon week posts from the reports", () => {
     const actor = { id: owner.id, name: owner.name, role: "OWNER" as const };
     await placeExampleStock(actor, "RUST-1G", "AMAZON", 10);
     await placeExampleStock(actor, "RUST-REM", "MAIN", 10);
+    const gallon = await prisma.product.findUniqueOrThrow({ where: { sku: "RUST-1G" } });
+    const remover = await prisma.product.findUniqueOrThrow({ where: { sku: "RUST-REM" } });
+    await prisma.amazonSkuMap.create({ data: { amazonSku: "SC-RP1-1.0-1", asin: "B0BZLYZQ2P", productId: gallon.id } });
+    await prisma.amazonSkuMap.create({ data: { amazonSku: "SPER-RR-1.0-1-FBA", asin: "B0CTQ5MFNQ", productId: remover.id } });
     const posted = await importAllOrdersFile(actor, orders);
     expect(posted.ok).toBe(true);
     if (!posted.ok) return;

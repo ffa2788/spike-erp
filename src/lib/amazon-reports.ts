@@ -1,3 +1,5 @@
+import { parseCsv } from "./csv";
+
 /** Seller Central files. Only the fields SPIKE keeps are returned. Buyer identifiers are never copied out. */
 
 export const ALL_ORDERS_HEADERS = [
@@ -57,12 +59,6 @@ export const FBA_HEADERS_USED = [
   "units-shipped-t30",
   "days-of-supply",
 ] as const;
-
-export const ASIN_SUGGESTIONS: Record<string, string> = {
-  B0BZLYZQ2P: "Rust Preventer 1 gal",
-  B0CTQ1TFCT: "Rust Preventer 2.5 gal",
-  B0CTQ5MFNQ: "Rust Remover",
-};
 
 export type AmazonOrderRow = {
   amazonOrderId: string;
@@ -139,6 +135,10 @@ function num(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function isShippedStatus(value: string): boolean {
+  return /^shipped\b/i.test(value.trim());
+}
+
 function fulfillmentOf(value: string): "FBA" | "FBM" | "" {
   const text = value.trim().toLowerCase();
   if (text === "amazon" || text === "afn") return "FBA";
@@ -178,7 +178,7 @@ export function parseAllOrders(text: string): AmazonOrderRow[] {
       shipPostalCode: row["ship-postal-code"] ?? "",
       shipCountry: row["ship-country"] ?? "",
       cancelled,
-      shipped: /^shipped$/i.test(orderStatus) && !cancelled,
+      shipped: !cancelled && (isShippedStatus(orderStatus) || isShippedStatus(itemStatus)),
     };
     return [kept];
   });
@@ -195,47 +195,118 @@ export function dedupeOrders(rows: AmazonOrderRow[]): AmazonOrderRow[] {
   return [...byKey.values()];
 }
 
-export function parseFbaManageInventory(text: string): FbaSnapshotRow[] {
-  const table = parseReportTable(text);
-  const headerOf = (name: string) => table.headers.find((header) => header.toLowerCase() === name.toLowerCase()) ?? name;
-  return table.rows.flatMap((row) => {
-    const sku = (row[headerOf("sku")] ?? "").trim();
-    if (!sku) return [];
-    const working = num(row[headerOf("inbound-working")]);
-    const shipped = num(row[headerOf("inbound-shipped")]);
-    const received = num(row[headerOf("inbound-received")]);
-    const days = row[headerOf("days-of-supply")];
-    return [{
-      snapshotDate: (row[headerOf("snapshot-date")] ?? "").slice(0, 10),
-      sku,
-      fnsku: row[headerOf("fnsku")] ?? "",
-      asin: (row[headerOf("asin")] ?? "").trim(),
-      productName: row[headerOf("product-name")] ?? "",
-      fulfillable: num(row[headerOf("available")]),
-      inbound: working + shipped + received,
-      inboundQuantity: num(row[headerOf("inbound-quantity")]),
-      reserved: num(row[headerOf("Total Reserved Quantity")]),
-      unfulfillable: num(row[headerOf("unfulfillable-quantity")]),
-      shipped30: num(row[headerOf("units-shipped-t30")]),
-      daysOfSupply: days === undefined || days === "" ? null : num(days),
-    }];
-  });
+function cleanReportText(text: string): string {
+  return text.replace(/^\uFEFF/, "").replace(/\uFFFD/g, "");
 }
 
-export function suggestAmazonSku(input: { sku: string; asin: string; products: { id: string; sku: string; name: string }[] }): SkuSuggestion {
-  const asin = input.asin.trim().toUpperCase();
-  const sku = input.sku.trim();
-  const fromAsin = ASIN_SUGGESTIONS[asin] ?? Object.entries(ASIN_SUGGESTIONS).find(([code]) => sku.toUpperCase().startsWith(code))?.[1] ?? "";
-  if (!fromAsin) return { label: "", productId: null };
-  const wanted = fromAsin.toLowerCase();
-  const match = input.products.find((product) => {
-    const name = product.name.toLowerCase();
-    if (wanted.includes("2.5")) return name.includes("preventer") && name.includes("2.5");
-    if (wanted.includes("1 gal")) return name.includes("preventer") && (name.includes("1 gal") || product.sku.toUpperCase() === "RUST-1G");
-    if (wanted.includes("remover")) return name.includes("remover");
-    return false;
+function fbaTable(text: string): { headers: string[]; rows: Record<string, string>[] } {
+  const clean = cleanReportText(text);
+  const first = clean.split(/\r?\n/).find((line) => line.trim()) ?? "";
+  const tabs = (first.match(/\t/g) ?? []).length;
+  const commas = (first.match(/,/g) ?? []).length;
+  if (commas > tabs) return parseCsv(clean);
+  return parseReportTable(clean);
+}
+
+function headerName(headers: string[], name: string): string | undefined {
+  return headers.find((header) => header.trim().toLowerCase() === name.toLowerCase());
+}
+
+function cell(row: Record<string, string>, headers: string[], name: string): string {
+  const key = headerName(headers, name);
+  return key ? (row[key] ?? "") : "";
+}
+
+/** A recognized FBA file must not come back as all zeros when the quantity columns have numbers. */
+export function fbaZeroProblem(rawQuantity: number, parsedQuantity: number): string | null {
+  if (rawQuantity > 0 && parsedQuantity === 0) {
+    return "The FBA file has quantities, but SPIKE read zero on every row. Nothing was saved.";
+  }
+  return null;
+}
+
+export function parseFbaManageInventory(text: string): FbaSnapshotRow[] {
+  const table = fbaTable(text);
+  const modern = Boolean(headerName(table.headers, "afn-fulfillable-quantity"));
+  const rows = table.rows.flatMap((row) => {
+    const sku = cell(row, table.headers, "sku").trim();
+    if (!sku) return [];
+    if (modern) {
+      const working = num(cell(row, table.headers, "afn-inbound-working-quantity"));
+      const shipped = num(cell(row, table.headers, "afn-inbound-shipped-quantity"));
+      const receiving = num(cell(row, table.headers, "afn-inbound-receiving-quantity"));
+      return [{
+        snapshotDate: "",
+        sku,
+        fnsku: cell(row, table.headers, "fnsku"),
+        asin: cell(row, table.headers, "asin").trim(),
+        productName: cell(row, table.headers, "product-name").replace(/\uFFFD/g, ""),
+        fulfillable: num(cell(row, table.headers, "afn-fulfillable-quantity")),
+        inbound: working + shipped + receiving,
+        inboundQuantity: num(cell(row, table.headers, "afn-total-quantity")),
+        reserved: num(cell(row, table.headers, "afn-reserved-quantity")),
+        unfulfillable: num(cell(row, table.headers, "afn-unsellable-quantity")),
+        shipped30: 0,
+        daysOfSupply: null,
+      }];
+    }
+    const working = num(cell(row, table.headers, "inbound-working"));
+    const shipped = num(cell(row, table.headers, "inbound-shipped"));
+    const received = num(cell(row, table.headers, "inbound-received"));
+    const days = cell(row, table.headers, "days-of-supply");
+    return [{
+      snapshotDate: cell(row, table.headers, "snapshot-date").slice(0, 10),
+      sku,
+      fnsku: cell(row, table.headers, "fnsku"),
+      asin: cell(row, table.headers, "asin").trim(),
+      productName: cell(row, table.headers, "product-name"),
+      fulfillable: num(cell(row, table.headers, "available")),
+      inbound: working + shipped + received,
+      inboundQuantity: num(cell(row, table.headers, "inbound-quantity")),
+      reserved: num(cell(row, table.headers, "Total Reserved Quantity")),
+      unfulfillable: num(cell(row, table.headers, "unfulfillable-quantity")),
+      shipped30: num(cell(row, table.headers, "units-shipped-t30")),
+      daysOfSupply: days === "" ? null : num(days),
+    }];
   });
-  return { label: fromAsin, productId: match?.id ?? null };
+  if (modern) {
+    const names = ["afn-fulfillable-quantity", "afn-unsellable-quantity", "afn-reserved-quantity", "afn-inbound-working-quantity", "afn-inbound-shipped-quantity", "afn-inbound-receiving-quantity"];
+    const raw = table.rows.reduce((sum, row) => sum + names.reduce((inner, name) => inner + num(cell(row, table.headers, name)), 0), 0);
+    const parsed = rows.reduce((sum, row) => sum + row.fulfillable + row.unfulfillable + row.reserved + row.inbound, 0);
+    const problem = fbaZeroProblem(raw, parsed);
+    if (problem) throw new Error(problem);
+  }
+  return rows;
+}
+
+export function planSkuMaps(input: {
+  mappings: { amazonSku: string; productId: string }[];
+  products: { id: string; sku: string }[];
+  existing: { amazonSku: string; productId: string | null }[];
+}): { ok: true; changes: { amazonSku: string; productId: string; productSku: string; action: "create" | "update" | "same" }[] } | { ok: false; error: string } {
+  const rows = input.mappings.map((row) => ({ amazonSku: row.amazonSku.trim(), productId: row.productId.trim() })).filter((row) => row.amazonSku || row.productId);
+  if (rows.length === 0) return { ok: false, error: "Send at least one Amazon SKU and a product ID." };
+  if (rows.some((row) => !row.amazonSku || !row.productId)) return { ok: false, error: "Each mapping needs an Amazon SKU and a product ID." };
+  const known = new Map(input.products.map((product) => [product.id, product.sku]));
+  const unknown = rows.find((row) => !known.has(row.productId));
+  if (unknown) return { ok: false, error: `Unknown product ID ${unknown.productId}. Nothing was saved.` };
+  const bySku = new Map(input.existing.map((row) => [row.amazonSku, row.productId]));
+  return {
+    ok: true,
+    changes: rows.map((row) => {
+      const prior = bySku.get(row.amazonSku);
+      const action = prior === undefined || !prior ? "create" as const : prior === row.productId ? "same" as const : "update" as const;
+      return { amazonSku: row.amazonSku, productId: row.productId, productSku: known.get(row.productId) ?? "", action };
+    }),
+  };
+}
+
+/** Auto-map only when the Amazon seller SKU is the same as a product SKU. Names are not used. */
+export function suggestAmazonSku(input: { sku: string; asin: string; products: { id: string; sku: string; name: string }[] }): SkuSuggestion {
+  const sku = input.sku.trim().toLowerCase();
+  if (!sku) return { label: "", productId: null };
+  const match = input.products.find((product) => product.sku.trim().toLowerCase() === sku);
+  return { label: match?.sku ?? "", productId: match?.id ?? null };
 }
 
 export function orderImportSummary(input: { rowsRead: number; kept: AmazonOrderRow[]; existingKeys: Set<string>; mapped: Set<string> }) {
@@ -254,7 +325,7 @@ export function orderImportSummary(input: { rowsRead: number; kept: AmazonOrderR
     else created += 1;
     if (!input.mapped.has(row.sku) && !seen.has(row.sku)) {
       seen.add(row.sku);
-      unmapped.push({ sku: row.sku, asin: row.asin, suggestion: ASIN_SUGGESTIONS[row.asin] ?? suggestAmazonSku({ sku: row.sku, asin: row.asin, products: [] }).label });
+      unmapped.push({ sku: row.sku, asin: row.asin, suggestion: "" });
     }
   }
   return { rowsRead: input.rowsRead, created, updated, cancelled, unmapped };

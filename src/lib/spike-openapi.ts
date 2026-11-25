@@ -46,6 +46,7 @@ export const openApi = {
     "/reports/profit": { get: { summary: "Profit for the period, the prior period, and the year to date." } },
     "/reports/balance": { get: { summary: "Balance sheet." } },
     "/reports/ar": { get: { summary: "Accounts receivable aging." } },
+    "/amazon/sku-maps": { post: { summary: "Save Amazon SKU to product mappings. dryRun true validates and writes nothing. Unknown product IDs are rejected." } },
     "/help-requests": { get: { summary: "List help requests", parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["open", "answered", "closed"] } }] } },
     "/help-requests/{id}/answer": { post: { summary: "Answer a help request. The answer shows on that person's Help button." } },
   },

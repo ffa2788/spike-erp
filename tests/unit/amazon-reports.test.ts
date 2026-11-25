@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ALL_ORDERS_HEADERS, dedupeOrders, parseAllOrders, parseFbaManageInventory, suggestAmazonSku } from "@/lib/amazon-reports";
+import { ALL_ORDERS_HEADERS, dedupeOrders, fbaZeroProblem, parseAllOrders, parseFbaManageInventory, planSkuMaps, suggestAmazonSku } from "@/lib/amazon-reports";
+import { planAmazonCustomer } from "@/lib/amazon-customer";
+import { paymentImportTotals, type PaymentRow } from "@/lib/amazon-payments";
 
 const orders = readFileSync("tests/fixtures/amazon-all-orders.tsv", "utf8");
 const fba = `\uFEFF${readFileSync("tests/fixtures/amazon-fba-inventory.tsv", "utf8")}`;
@@ -30,18 +32,77 @@ describe("Amazon Seller Central files", () => {
     expect(rows.find((row) => row.sku === "SC-RP1-1.0-1 -FBA")?.fulfillable).toBe(2);
   });
 
-  it("suggests the known ASINs and leaves junk listed rather than matched to a product", () => {
+  it("auto-maps only an exact SKU and treats every Shipped status as shipped", () => {
     const products = [
-      { id: "gal", sku: "RUST-1G", name: "SPER Rust Preventer, 1 gal" },
-      { id: "rem", sku: "RUST-REM", name: "SPER Rust Remover" },
+      { id: "gal", sku: "RUST-PREVENTER-1", name: "Rust Preventer LC 1 gal" },
+      { id: "rem", sku: "IRON-STAIN-5", name: "Iron stain remover 5 gallon" },
     ];
-    expect(suggestAmazonSku({ sku: "SC-RP1-1.0-1", asin: "B0BZLYZQ2P", products }).productId).toBe("gal");
-    expect(suggestAmazonSku({ sku: "SPER-RR-1.0-1-FBA", asin: "B0CTQ5MFNQ", products }).productId).toBe("rem");
-    const two = suggestAmazonSku({ sku: "SPER-RP-2.5-1-FBA", asin: "B0CTQ1TFCT", products });
-    expect(two.label).toBe("Rust Preventer 2.5 gal");
-    expect(two.productId).toBeNull();
-    const junk = suggestAmazonSku({ sku: "B0CTQ1TFCT.missing01", asin: "", products });
-    expect(junk.label).toBe("Rust Preventer 2.5 gal");
-    expect(junk.productId).toBeNull();
+    expect(suggestAmazonSku({ sku: " rust-preventer-1 ", asin: "B0BZLYZQ2P", products }).productId).toBe("gal");
+    expect(suggestAmazonSku({ sku: "1 gal preventer", asin: "B0BZLYZQ2P", products }).productId).toBeNull();
+    expect(suggestAmazonSku({ sku: "Rust Remover", asin: "B0CTQ5MFNQ", products }).productId).toBeNull();
+    expect(suggestAmazonSku({ sku: "SC-RP1-1.0-1 -FBA", asin: "B0BZLYZQ2P", products }).productId).toBeNull();
+    const text = [
+      "amazon-order-id\torder-item-id\torder-status\titem-status\tsku\tquantity\titem-price",
+      "1\t1\tShipped\tShipped\tA\t1\t10",
+      "2\t2\tShipped - Delivered to Buyer\tShipped\tA\t1\t10",
+      "3\t3\tShipped - Picked Up\tShipped\tA\t1\t10",
+      "4\t4\tShipped - Out for Delivery\tShipped\tA\t1\t10",
+      "5\t5\tPending\tUnshipped\tA\t1\t10",
+      "6\t6\tCancelled\tShipped\tA\t1\t10",
+    ].join("\n");
+    const rows = parseAllOrders(text);
+    expect(rows.filter((row) => row.shipped)).toHaveLength(4);
+    expect(rows.find((row) => row.orderItemId === "5")?.shipped).toBe(false);
+    expect(rows.find((row) => row.orderItemId === "6")?.cancelled).toBe(true);
+    expect(rows.find((row) => row.orderItemId === "6")?.shipped).toBe(false);
+  });
+
+  it("reads the Manage FBA Inventory export and refuses a file whose quantities come back as zero", () => {
+    const header = "sku,fnsku,asin,product-name,condition,your-price,mfn-listing-exists,mfn-fulfillable-quantity,afn-listing-exists,afn-warehouse-quantity,afn-fulfillable-quantity,afn-unsellable-quantity,afn-reserved-quantity,afn-total-quantity,per-unit-volume,afn-inbound-working-quantity,afn-inbound-shipped-quantity,afn-inbound-receiving-quantity,afn-researching-quantity,afn-reserved-future-supply,afn-future-supply-buyable,afn-fc-transfer-quantity,afn-onhand-buyable-quantity,store";
+    const csv = [
+      header,
+      'SC-HDBD-01-1,X1,B000001,"Heavy duty\uFFFDbinder",New,10,No,0,Yes,106,104,2,0,106,0.1,0,0,0,0,0,0,0,104,Main',
+      '"SC-RP1-1.0-1 -FBA",X2,B000002,"Rust preventer, 1 gal",New,20,No,0,Yes,185,87,0,13,185,0.2,1,2,3,0,0,0,0,87,Main',
+    ].join("\n");
+    const rows = parseFbaManageInventory(csv);
+    expect(rows.find((row) => row.sku === "SC-HDBD-01-1")).toMatchObject({ fulfillable: 104, unfulfillable: 2, inboundQuantity: 106, reserved: 0 });
+    expect(rows.find((row) => row.sku === "SC-RP1-1.0-1 -FBA")).toMatchObject({ fulfillable: 87, reserved: 13, inbound: 6, inboundQuantity: 185 });
+    expect(fbaZeroProblem(104, 0)).toMatch(/read zero/);
+    expect(fbaZeroProblem(0, 0)).toBeNull();
+  });
+
+  it("plans one Amazon customer and rejects an unknown product on a SKU map", () => {
+    const parties = [
+      { id: "a", code: "AMAZON-SALES", name: "Amazon sales", channel: "DIRECT", isCustomer: true },
+      { id: "b", code: "AMAZON-FULFILLMENT", name: "Amazon Fulfillment", channel: "DIRECT", isCustomer: true },
+    ];
+    expect(planAmazonCustomer("AMAZON-SALES", parties).ok).toBe(true);
+    const taken = planAmazonCustomer("AMAZON-FULFILLMENT", parties.map((row) => row.id === "a" ? { ...row, channel: "AMAZON" } : row));
+    expect(taken.ok).toBe(false);
+    const again = planAmazonCustomer("AMAZON-SALES", parties.map((row) => row.id === "a" ? { ...row, channel: "AMAZON" } : row));
+    expect(again.ok && again.already).toBe(true);
+    const mapped = planSkuMaps({
+      mappings: [{ amazonSku: "SC-HDBD-01-1", productId: "missing" }],
+      products: [{ id: "gal", sku: "RUST-PREVENTER-1" }],
+      existing: [],
+    });
+    expect(mapped.ok).toBe(false);
+    const ready = planSkuMaps({
+      mappings: [{ amazonSku: "RUST-PREVENTER-1", productId: "gal" }],
+      products: [{ id: "gal", sku: "RUST-PREVENTER-1" }],
+      existing: [],
+    });
+    expect(ready.ok && ready.changes[0].action).toBe("create");
+  });
+
+  it("sums fees from a payments file without writing", () => {
+    const row = (type: string, total: number): PaymentRow => ({
+      dateTime: "2026-11-01", day: "2026-11-01", settlementId: "S1", type, orderId: "", sku: "", description: "", qty: 0,
+      fulfillment: "", channel: "", productSalesCents: 0, sellingFeeCents: 0, fbaFeeCents: 0, otherTransactionFeeCents: 0,
+      otherCents: 0, promotionalRebatesCents: 0, totalCents: total,
+    });
+    expect(paymentImportTotals([row("Service Fee", -250), row("Refund", -100), row("Transfer", -4000)])).toMatchObject({
+      feeCents: 250, refunds: 1, transferCents: 4000, transfers: 1,
+    });
   });
 });
