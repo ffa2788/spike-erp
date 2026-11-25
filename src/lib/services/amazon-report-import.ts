@@ -1,4 +1,5 @@
 import { dedupePayments, paymentDay, paymentFingerprint, paymentImportTotals, readAmazonMoneyFile } from "../amazon-payments";
+import { orderStockHolds } from "../amazon-stock";
 import { dedupeOrders, invoiceQty, parseAllOrders, parseFbaManageInventory, suggestAmazonSku } from "../amazon-reports";
 import { prisma } from "../db";
 import { toDateInput } from "../dates";
@@ -6,6 +7,7 @@ import { usd } from "../format";
 import { reconcileAmazonPeriod, type AmazonReconciliation } from "../amazon-reconcile";
 import { err, ok, type Result } from "../result";
 import { importAllOrdersFile, importFbaFile, type AmazonImportSummary } from "./amazon-import";
+import { loadBalances } from "./shared";
 import { importPaymentsFile, type PaymentsImportSummary } from "./amazon-payments-import";
 import type { Actor } from "./shared";
 
@@ -33,6 +35,7 @@ export type AmazonPreview = {
   amazonCustomer: { id: string; code: string; name: string } | null;
   blocked: string | null;
   invoices: { orderId: string; fulfillment: string; lines: { sku: string; productId: string; qty: number; netCents: number }[] }[];
+  held: { orderId: string; sku: string; product: string; needed: number; available: number; reason: string }[];
   neededMappings: { sku: string; asin: string }[];
   newMappings: { sku: string; productId: string }[];
   fees: { feeCents: number; refunds: number; reimbursements: number; transferCents: number; transfers: number } | null;
@@ -55,10 +58,11 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
   const invoiced = new Set(invoices.map((row) => row.marketplaceOrderId).filter(Boolean));
   const existingItems = new Map(items.map((row) => [`${row.amazonOrderId}|${row.orderItemId}`, row]));
   const invoicesOut: AmazonPreview["invoices"] = [];
+  const held: AmazonPreview["held"] = [];
   const needed = new Map<string, { sku: string; asin: string }>();
   const freshMaps = new Map<string, string>();
   if (files.orders?.trim()) {
-    const pending = new Map<string, { fulfillment: string; lines: AmazonPreview["invoices"][number]["lines"] }>();
+    const pending = new Map<string, { fulfillment: string; date: string; lines: { sku: string; productId: string; productSku: string; qty: number; netCents: number }[] }>();
     for (const row of dedupeOrders(parseAllOrders(files.orders))) {
       if (row.cancelled) continue;
       const prior = existingItems.get(`${row.amazonOrderId}|${row.orderItemId}`);
@@ -72,12 +76,30 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
         continue;
       }
       if (row.shipped && row.netCents > 0 && !prior?.invoiceId && !invoiced.has(row.amazonOrderId)) {
-        const bucket = pending.get(row.amazonOrderId) ?? { fulfillment: row.fulfillment, lines: [] };
-        bucket.lines.push({ sku: row.sku, productId, qty: invoiceQty(row.qty, known?.units ?? 1), netCents: row.netCents });
+        const bucket = pending.get(row.amazonOrderId) ?? { fulfillment: row.fulfillment, date: row.purchaseDate, lines: [] };
+        bucket.lines.push({
+          sku: row.sku,
+          productId,
+          productSku: products.find((product) => product.id === productId)?.sku ?? productId,
+          qty: invoiceQty(row.qty, known?.units ?? 1),
+          netCents: row.netCents,
+        });
         pending.set(row.amazonOrderId, bucket);
       }
     }
-    for (const [orderId, bucket] of pending) invoicesOut.push({ orderId, fulfillment: bucket.fulfillment, lines: bucket.lines });
+    const [stock, locations] = await Promise.all([
+      prisma.$transaction((tx) => loadBalances(tx)),
+      prisma.location.findMany(),
+    ]);
+    for (const [orderId, bucket] of pending) {
+      const place = locations.find((location) => location.code === (bucket.fulfillment === "FBM" ? "MAIN" : "AMAZON"));
+      const short = place ? orderStockHolds(stock, place.id, bucket.date || toDateInput(new Date()), bucket.lines) : [];
+      if (!place || short.length) {
+        held.push(...(short.length ? short : [{ sku: bucket.lines[0]?.sku ?? "", product: bucket.lines[0]?.productSku ?? "", needed: bucket.lines[0]?.qty ?? 0, available: 0, reason: "The warehouse for this Amazon order is not set up." }]).map((row) => ({ orderId, ...row })));
+        continue;
+      }
+      invoicesOut.push({ orderId, fulfillment: bucket.fulfillment, lines: bucket.lines.map(({ productSku: _productSku, ...line }) => line) });
+    }
   }
   let fba: AmazonPreview["fba"] = null;
   if (files.fba?.trim()) {
@@ -117,6 +139,7 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
     amazonCustomer: amazon,
     blocked,
     invoices: invoicesOut,
+    held,
     neededMappings: [...needed.values()],
     newMappings: [...freshMaps.entries()].map(([sku, productId]) => ({ sku, productId })),
     fees,

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALL_ORDERS_HEADERS, dedupeOrders, fbaZeroProblem, parseAllOrders, parseFbaManageInventory, planSkuMaps, suggestAmazonSku } from "@/lib/amazon-reports";
+import { orderStockHolds } from "@/lib/amazon-stock";
 import { planAmazonCustomer } from "@/lib/amazon-customer";
 import { paymentImportTotals, type PaymentRow } from "@/lib/amazon-payments";
 
@@ -93,6 +94,32 @@ describe("Amazon Seller Central files", () => {
       existing: [],
     });
     expect(ready.ok && ready.changes[0].action).toBe("create");
+    expect(ready.ok && ready.changes[0].units).toBe(1);
+    const four = planSkuMaps({
+      mappings: [{ amazonSku: "SC-PR1-1-4PK", productId: "gal", units: 4 }],
+      products: [{ id: "gal", sku: "RUST-PREVENTER-1" }],
+      existing: [],
+    });
+    expect(four.ok && four.changes[0]).toMatchObject({ units: 4, action: "create", productSku: "RUST-PREVENTER-1" });
+    expect(planSkuMaps({
+      mappings: [{ amazonSku: "SC-PR1-1-4PK", productId: "gal", units: 0 }],
+      products: [{ id: "gal", sku: "RUST-PREVENTER-1" }],
+      existing: [],
+    }).ok).toBe(false);
+  });
+
+  it("holds an order when released stock is short and leaves that stock in place", () => {
+    const lots = [{
+      lotId: "lot", lotNumber: "A", productId: "gal", qcStatus: "APPROVED" as const, expiresOn: null, receivedOn: "2026-10-01",
+      unitCost: 1, formulaVersion: null, nsfEligible: false,
+      locations: [{ locationId: "amazon", locationCode: "AMAZON", shippable: true, qty: 1 }],
+    }];
+    const held = orderStockHolds(lots, "amazon", "2026-11-01", [{ sku: "SC-PR1-1-4PK", productId: "gal", productSku: "RUST-PREVENTER-1", qty: 4 }]);
+    expect(held[0]).toMatchObject({ sku: "SC-PR1-1-4PK", product: "RUST-PREVENTER-1", needed: 4, available: 1 });
+    expect(lots[0].locations[0].qty).toBe(1);
+    const enough = orderStockHolds(lots, "amazon", "2026-11-01", [{ sku: "SC-PR1-1-4PK", productId: "gal", productSku: "RUST-PREVENTER-1", qty: 1 }]);
+    expect(enough).toEqual([]);
+    expect(lots[0].locations[0].qty).toBe(0);
   });
 
   it("sums fees from a payments file without writing", () => {
