@@ -1,5 +1,5 @@
 import { dedupePayments, paymentDay, paymentFingerprint, paymentImportTotals, readAmazonMoneyFile } from "../amazon-payments";
-import { dedupeOrders, parseAllOrders, parseFbaManageInventory, suggestAmazonSku } from "../amazon-reports";
+import { dedupeOrders, invoiceQty, parseAllOrders, parseFbaManageInventory, suggestAmazonSku } from "../amazon-reports";
 import { prisma } from "../db";
 import { toDateInput } from "../dates";
 import { usd } from "../format";
@@ -51,7 +51,7 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
     prisma.amazonOrderItem.findMany({ select: { amazonOrderId: true, orderItemId: true, lastUpdated: true, invoiceId: true } }),
     prisma.invoice.findMany({ where: { channel: "AMAZON", status: { not: "VOID" } }, select: { marketplaceOrderId: true } }),
   ]);
-  const mapBySku = new Map(maps.filter((row) => row.productId).map((row) => [row.amazonSku, row.productId!]));
+  const mapBySku = new Map(maps.filter((row) => row.productId).map((row) => [row.amazonSku, { productId: row.productId!, units: row.units > 0 ? row.units : 1 }]));
   const invoiced = new Set(invoices.map((row) => row.marketplaceOrderId).filter(Boolean));
   const existingItems = new Map(items.map((row) => [`${row.amazonOrderId}|${row.orderItemId}`, row]));
   const invoicesOut: AmazonPreview["invoices"] = [];
@@ -64,15 +64,16 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
       const prior = existingItems.get(`${row.amazonOrderId}|${row.orderItemId}`);
       if (prior && prior.lastUpdated > row.lastUpdated) continue;
       const exact = suggestAmazonSku({ sku: row.sku, asin: row.asin, products }).productId;
-      const productId = mapBySku.get(row.sku) ?? exact;
-      if (exact && !mapBySku.has(row.sku)) freshMaps.set(row.sku, exact);
+      const known = mapBySku.get(row.sku);
+      const productId = known?.productId ?? exact;
+      if (exact && !known) freshMaps.set(row.sku, exact);
       if (!productId) {
         if (row.sku) needed.set(row.sku, { sku: row.sku, asin: row.asin });
         continue;
       }
       if (row.shipped && row.netCents > 0 && !prior?.invoiceId && !invoiced.has(row.amazonOrderId)) {
         const bucket = pending.get(row.amazonOrderId) ?? { fulfillment: row.fulfillment, lines: [] };
-        bucket.lines.push({ sku: row.sku, productId, qty: row.qty, netCents: row.netCents });
+        bucket.lines.push({ sku: row.sku, productId, qty: invoiceQty(row.qty, known?.units ?? 1), netCents: row.netCents });
         pending.set(row.amazonOrderId, bucket);
       }
     }
@@ -88,7 +89,7 @@ export async function previewAmazonReports(files: { orders?: string; payments?: 
     }
     fba = rows.map((row) => {
       const exact = suggestAmazonSku({ sku: row.sku, asin: row.asin, products }).productId;
-      const productId = mapBySku.get(row.sku) ?? exact ?? null;
+      const productId = mapBySku.get(row.sku)?.productId ?? exact ?? null;
       if (exact && !mapBySku.has(row.sku)) freshMaps.set(row.sku, exact);
       if (!productId && row.sku) needed.set(row.sku, { sku: row.sku, asin: row.asin });
       return { sku: row.sku, fulfillable: row.fulfillable, inbound: row.inbound, reserved: row.reserved, unfulfillable: row.unfulfillable, total: row.inboundQuantity, productId };

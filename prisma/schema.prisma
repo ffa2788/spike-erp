@@ -1055,6 +1055,8 @@ model AmazonSkuMap {
   asin       String   @default("")
   productId  String?
   product    Product? @relation(fields: [productId], references: [id])
+  /// How many of the product one Amazon unit contains. A case of 2 is 2.
+  units      Int      @default(1)
 }
 
 model AmazonOrderItem {

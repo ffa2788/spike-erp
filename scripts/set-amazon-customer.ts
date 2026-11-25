@@ -4,7 +4,7 @@ import { prisma } from "../src/lib/db";
 
 function customerArg(): string {
   const flag = process.argv.find((arg) => arg.startsWith("--customer="));
-  return flag ? flag.slice("--customer=".length) : "";
+  return flag ? flag.slice("--customer=".length) : "AMAZON-SALES";
 }
 
 async function main() {

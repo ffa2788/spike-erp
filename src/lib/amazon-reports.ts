@@ -135,6 +135,12 @@ function num(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** Amazon quantity times how many of the product are in one Amazon unit. */
+export function invoiceQty(amazonQty: number, units: number): number {
+  const each = units > 0 ? units : 1;
+  return amazonQty * each;
+}
+
 export function isShippedStatus(value: string): boolean {
   return /^shipped\b/i.test(value.trim());
 }

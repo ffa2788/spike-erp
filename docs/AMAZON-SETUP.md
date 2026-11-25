@@ -61,12 +61,27 @@ Every A- invoice uses the one customer whose channel is AMAZON. If that customer
 
 `DATABASE_URL` and `DIRECT_URL` must already be set. Do not put the connection string in the command.
 
+The Amazon customer is `AMAZON-SALES`. Deploy sets that customer's channel to AMAZON when no other customer already has it. The same change can be checked by hand:
+
 ```
-npx tsx scripts/set-amazon-customer.ts --customer=AMAZON-SALES
-npx tsx scripts/set-amazon-customer.ts --customer=AMAZON-SALES --apply
+npx tsx scripts/set-amazon-customer.ts
+npx tsx scripts/set-amazon-customer.ts --apply
 ```
 
-The first command prints the customer and the channel change. `--apply` writes it. The script refuses if a different customer is already the Amazon channel. Running it again after a successful apply changes nothing. `--customer` is the customer ID, such as `AMAZON-SALES` or `AMAZON-FULFILLMENT`. Pick one.
+With no `--customer`, the script uses `AMAZON-SALES`. The first command prints the change. `--apply` writes it. It refuses if a different customer is already the Amazon channel. Running it again changes nothing.
+
+`SC-PR1-1-2PK` is a case of two of `RUST-PREVENTER-1` (the 1 gal). One Amazon unit invoices two of that product. Deploy adds the mapping when `RUST-PREVENTER-1` is already on file.
+
+## 0.5 gal packs
+
+The 2-pack and the 4-pack are presentations of `RUST-PREVENTER-1`: the same formula, filled into a 0.5 gal jug. The jug SKU, the jug cost, and the two presentation SKUs are not set. Fill them in `src/lib/rust-preventer-packs.ts` (`halfGallonJug.sku`, `halfGallonJug.costDollars`, `halfGallonPackSkus.twoPack`, `halfGallonPackSkus.fourPack`). Then:
+
+```
+npx tsx scripts/add-rust-half-gallon.ts
+npx tsx scripts/add-rust-half-gallon.ts --apply
+```
+
+Until those four values are filled in, the script writes nothing.
 
 Cross-check a month or a settlement id:
 
