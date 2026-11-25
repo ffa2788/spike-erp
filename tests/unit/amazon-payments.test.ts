@@ -114,4 +114,24 @@ describe("Amazon payments date range", () => {
     expect(journalProblem(feeRowJournal(-3999)!)).toBeNull();
     expect(payout?.[0].debitCents).toBe(123456);
   });
+
+  it("skips the date/time preamble and errors when no payment rows can be read", () => {
+    const file = [
+      "date/time: posted date/time",
+      "settlement id: SYNTH-1",
+      '"date/time","settlement id","type","order id","sku","description","quantity","total"',
+      '"Nov 2, 2026 9:15:00 AM PST","SYNTH-1","Order","111-1","SC-PR1-1-4PK","Rust Preventer","1","10.00"',
+    ].join("\n");
+    const parsed = parsePaymentsReport(file);
+    expect(parsed.error).toBeNull();
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0].sku).toBe("SC-PR1-1-4PK");
+    expect(parsed.rows[0].totalCents).toBe(1000);
+    const preambleOnly = parsePaymentsReport("date/time: posted date/time\nsettlement id: SYNTH-1\n");
+    expect(preambleOnly.rows).toEqual([]);
+    expect(preambleOnly.error).toMatch(/date\/time/);
+    const headerOnly = parsePaymentsReport('"date/time","type","sku"\n"","","SC-X"\n');
+    expect(headerOnly.rows).toEqual([]);
+    expect(headerOnly.error).toMatch(/no payment rows/);
+  });
 });

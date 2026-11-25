@@ -116,7 +116,8 @@ async function saveSkuMaps(body: unknown): Promise<SpikeResult> {
     const amazonSku = text(row, "amazonSku");
     const productId = text(row, "productId");
     if (!amazonSku && !productId) return [];
-    return [{ amazonSku, productId, asin: text(row, "asin") }];
+    const units = row.units == null || row.units === "" ? undefined : Number(row.units);
+    return [{ amazonSku, productId, asin: text(row, "asin"), units }];
   });
   const saved = await saveAmazonSkuMaps({ mappings, dryRun: record.dryRun === true });
   if (!saved.ok) return { status: 400, body: { error: saved.error } };

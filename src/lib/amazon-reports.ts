@@ -286,23 +286,31 @@ export function parseFbaManageInventory(text: string): FbaSnapshotRow[] {
 }
 
 export function planSkuMaps(input: {
-  mappings: { amazonSku: string; productId: string }[];
+  mappings: { amazonSku: string; productId: string; units?: number | null }[];
   products: { id: string; sku: string }[];
-  existing: { amazonSku: string; productId: string | null }[];
-}): { ok: true; changes: { amazonSku: string; productId: string; productSku: string; action: "create" | "update" | "same" }[] } | { ok: false; error: string } {
-  const rows = input.mappings.map((row) => ({ amazonSku: row.amazonSku.trim(), productId: row.productId.trim() })).filter((row) => row.amazonSku || row.productId);
+  existing: { amazonSku: string; productId: string | null; units?: number }[];
+}): { ok: true; changes: { amazonSku: string; productId: string; productSku: string; units: number; action: "create" | "update" | "same" }[] } | { ok: false; error: string } {
+  const rows = input.mappings
+    .map((row) => ({ amazonSku: row.amazonSku.trim(), productId: row.productId.trim(), units: row.units }))
+    .filter((row) => row.amazonSku || row.productId);
   if (rows.length === 0) return { ok: false, error: "Send at least one Amazon SKU and a product ID." };
   if (rows.some((row) => !row.amazonSku || !row.productId)) return { ok: false, error: "Each mapping needs an Amazon SKU and a product ID." };
+  for (const row of rows) {
+    if (row.units == null) continue;
+    if (!Number.isInteger(row.units) || row.units < 1) return { ok: false, error: `Units for ${row.amazonSku} must be a positive whole number.` };
+  }
   const known = new Map(input.products.map((product) => [product.id, product.sku]));
   const unknown = rows.find((row) => !known.has(row.productId));
   if (unknown) return { ok: false, error: `Unknown product ID ${unknown.productId}. Nothing was saved.` };
-  const bySku = new Map(input.existing.map((row) => [row.amazonSku, row.productId]));
+  const bySku = new Map(input.existing.map((row) => [row.amazonSku, row]));
   return {
     ok: true,
     changes: rows.map((row) => {
+      const units = row.units ?? 1;
       const prior = bySku.get(row.amazonSku);
-      const action = prior === undefined || !prior ? "create" as const : prior === row.productId ? "same" as const : "update" as const;
-      return { amazonSku: row.amazonSku, productId: row.productId, productSku: known.get(row.productId) ?? "", action };
+      const priorUnits = prior?.units && prior.units > 0 ? prior.units : 1;
+      const action = !prior?.productId ? "create" as const : prior.productId === row.productId && priorUnits === units ? "same" as const : "update" as const;
+      return { amazonSku: row.amazonSku, productId: row.productId, productSku: known.get(row.productId) ?? "", units, action };
     }),
   };
 }

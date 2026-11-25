@@ -1,10 +1,11 @@
+import { orderStockHolds } from "../amazon-stock";
 import { dedupeOrders, invoiceQty, orderImportSummary, parseAllOrders, parseFbaManageInventory, planSkuMaps, suggestAmazonSku } from "../amazon-reports";
-import { parseDateInput } from "../dates";
+import { parseDateInput, toDateInput } from "../dates";
 import { prisma } from "../db";
 import { err, ok, type Result } from "../result";
 import { postAmazonHistoryInvoice } from "./sales";
 import { assembleForAmazonOrders, storeAmazonInvoicePdf } from "./amazon-week";
-import type { Actor } from "./shared";
+import { loadBalances, type Actor } from "./shared";
 
 export type AmazonImportSummary = {
   rowsRead: number;
@@ -13,6 +14,7 @@ export type AmazonImportSummary = {
   cancelled: number;
   invoices: string[];
   unmapped: { sku: string; asin: string; suggestion: string }[];
+  held: { orderId: string; sku: string; product: string; needed: number; available: number; reason: string }[];
 };
 
 export async function importAllOrdersFile(actor: Actor, text: string): Promise<Result<AmazonImportSummary>> {
@@ -34,7 +36,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     mapped: new Set([...mapBySku.keys()]),
   });
   const invoices: string[] = [];
-  const pending = new Map<string, { date: Date; shipTo: string; fulfillment: "FBA" | "FBM"; lines: { productId: string; description: string; qty: number; netCents: number; itemKey: string }[] }>();
+  const pending = new Map<string, { date: Date; shipTo: string; fulfillment: "FBA" | "FBM"; lines: { productId: string; productSku: string; sku: string; description: string; qty: number; netCents: number; itemKey: string }[] }>();
   for (const row of kept) {
     const key = `${row.amazonOrderId}|${row.orderItemId}`;
     const prior = existingByKey.get(key);
@@ -98,20 +100,44 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     if (row.shipped && !row.cancelled && row.netCents > 0 && productId && !saved.invoiceId) {
       const date = parseDateInput(row.purchaseDate) ?? new Date();
       const bucket = pending.get(row.amazonOrderId) ?? { date, shipTo: `${row.shipCity}, ${row.shipState} ${row.shipPostalCode}`.trim(), fulfillment: row.fulfillment === "FBM" ? "FBM" as const : "FBA" as const, lines: [] };
-      bucket.lines.push({ productId, description: row.productName || row.sku, qty: invoiceQty(row.qty, units), netCents: row.netCents, itemKey: saved.id });
+      bucket.lines.push({
+        productId,
+        productSku: products.find((product) => product.id === productId)?.sku ?? productId,
+        sku: row.sku,
+        description: row.productName || row.sku,
+        qty: invoiceQty(row.qty, units),
+        netCents: row.netCents,
+        itemKey: saved.id,
+      });
       pending.set(row.amazonOrderId, bucket);
     }
   }
+  const locations = await prisma.location.findMany();
+  const held: AmazonImportSummary["held"] = [];
   for (const [orderId, bucket] of pending) {
+    const place = locations.find((location) => location.code === (bucket.fulfillment === "FBM" ? "MAIN" : "AMAZON"));
+    if (!place) return err("The warehouse for this Amazon order is not set up.");
+    const stock = await prisma.$transaction((tx) => loadBalances(tx, bucket.lines.map((line) => line.productId)));
+    const short = orderStockHolds(stock, place.id, toDateInput(bucket.date), bucket.lines);
+    if (short.length) {
+      held.push(...short.map((row) => ({ orderId, ...row })));
+      continue;
+    }
     const posted = await postAmazonHistoryInvoice(actor, {
       partyId: amazon.id,
       orderId,
       date: bucket.date,
       shipTo: bucket.shipTo,
       fulfillment: bucket.fulfillment,
-      lines: bucket.lines.map(({ itemKey: _item, ...line }) => line),
+      lines: bucket.lines.map(({ itemKey: _item, sku: _sku, productSku: _productSku, ...line }) => line),
     });
-    if (!posted.ok) return err(posted.error);
+    if (!posted.ok) {
+      if (posted.error.includes("Not enough released stock")) {
+        held.push({ orderId, sku: bucket.lines[0]?.sku ?? "", product: bucket.lines[0]?.productSku ?? "", needed: bucket.lines[0]?.qty ?? 0, available: 0, reason: posted.error });
+        continue;
+      }
+      return err(posted.error);
+    }
     if (posted.value.created) invoices.push(posted.value.number);
     await prisma.amazonOrderItem.updateMany({
       where: { id: { in: bucket.lines.map((line) => line.itemKey) } },
@@ -124,7 +150,7 @@ export async function importAllOrdersFile(actor: Actor, text: string): Promise<R
     if (invoice) await storeAmazonInvoicePdf(invoice.id).catch(() => undefined);
   }
   await assembleForAmazonOrders(actor);
-  return ok({ ...summary, invoices, unmapped });
+  return ok({ ...summary, invoices, unmapped, held });
 }
 
 export async function importFbaFile(text: string): Promise<Result<{ rowsRead: number; saved: number; unmapped: { sku: string; asin: string; suggestion: string }[] }>> {
@@ -185,9 +211,9 @@ export async function importFbaFile(text: string): Promise<Result<{ rowsRead: nu
 }
 
 export async function saveAmazonSkuMaps(input: {
-  mappings: { amazonSku: string; productId: string; asin?: string }[];
+  mappings: { amazonSku: string; productId: string; asin?: string; units?: number | null }[];
   dryRun: boolean;
-}): Promise<Result<{ dryRun: boolean; changes: { amazonSku: string; productId: string; productSku: string; action: "create" | "update" | "same" }[] }>> {
+}): Promise<Result<{ dryRun: boolean; changes: { amazonSku: string; productId: string; productSku: string; units: number; action: "create" | "update" | "same" }[] }>> {
   const products = await prisma.product.findMany({ select: { id: true, sku: true } });
   const existing = await prisma.amazonSkuMap.findMany();
   const planned = planSkuMaps({ mappings: input.mappings, products, existing });
@@ -198,8 +224,8 @@ export async function saveAmazonSkuMaps(input: {
     const asin = input.mappings.find((row) => row.amazonSku.trim() === change.amazonSku)?.asin?.trim() ?? "";
     await prisma.amazonSkuMap.upsert({
       where: { amazonSku: change.amazonSku },
-      update: { productId: change.productId, ...(asin ? { asin } : {}) },
-      create: { amazonSku: change.amazonSku, asin, productId: change.productId },
+      update: { productId: change.productId, units: change.units, ...(asin ? { asin } : {}) },
+      create: { amazonSku: change.amazonSku, asin, productId: change.productId, units: change.units },
     });
     await prisma.amazonOrderItem.updateMany({ where: { sku: change.amazonSku, productId: null }, data: { productId: change.productId } });
   }

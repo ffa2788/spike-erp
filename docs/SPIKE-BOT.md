@@ -26,7 +26,7 @@ The answer shows in that person's Help panel, with a badge on the Help button. O
 ## Amazon reports
 
 - `POST /api/amazon/import` multipart fields `orders`, `payments`, `settlement`, and `fba`. Or one file with `kind` and `file`. Add `dryRun=true` to see the invoices, the SKUs that still need a mapping, the fees, and the FBA levels. A dry run writes nothing.
-- `POST /api/v1/amazon/sku-maps` with `{ "mappings": [{ "amazonSku": "SC-RP1-1.0-1", "productId": "…" }], "dryRun": true }`. The key needs `sales`. Unknown product IDs are rejected and nothing is saved. SPIKE does not invent a product for an unmapped SKU.
+- `POST /api/v1/amazon/sku-maps` with `{ "mappings": [{ "amazonSku": "SC-PR1-1-4PK", "productId": "…", "units": 4 }], "dryRun": true }`. `units` is how many of the product are in one Amazon unit, a positive whole number, default 1. The key needs `sales`. Unknown product IDs are rejected and nothing is saved. SPIKE does not invent a product for an unmapped SKU.
 - `GET /api/amazon/reconciliation?period=2026-11` JSON. Add `format=pdf` for the PDF.
 - `GET /api/amazon/invoices.zip?period=2026-11` the stored A- invoice PDFs for that month.
 

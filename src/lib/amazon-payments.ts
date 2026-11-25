@@ -191,17 +191,22 @@ function settlementType(transaction: string, amountType: string): string {
   return "Order";
 }
 
+function isDateTimeHeader(cell: string): boolean {
+  return cell.trim().toLowerCase() === "date/time";
+}
+
 export function parsePaymentsReport(text: string): { rows: PaymentRow[]; error: string | null } {
-  const table = csvTable(text);
-  const headerIndex = table.findIndex((row) => (row[0] ?? "").trim().toLowerCase().startsWith("date/time"));
-  if (headerIndex < 0) return { rows: [], error: "The payments report needs a header row that starts with date/time." };
+  const table = csvTable(text).filter((row) => row.some((cell) => cell.trim() !== ""));
+  if (table.length === 0) return { rows: [], error: "The payments report is empty." };
+  const headerIndex = table.findIndex((row) => row.some((cell) => isDateTimeHeader(cell)));
+  if (headerIndex < 0) return { rows: [], error: "The payments report needs a header row with a date/time column." };
   const headers = table[headerIndex].map((cell) => cell.trim().toLowerCase());
   const at = (row: string[], name: string) => {
     const index = headers.indexOf(name.toLowerCase());
     return index >= 0 ? (row[index] ?? "").trim() : "";
   };
-  const rows = table.slice(headerIndex + 1).flatMap((row) => {
-    if (row.every((cell) => cell.trim() === "")) return [];
+  const body = table.slice(headerIndex + 1);
+  const rows = body.flatMap((row) => {
     const type = at(row, "type");
     const dateTime = at(row, "date/time");
     if (!type && !dateTime) return [];
@@ -227,6 +232,7 @@ export function parsePaymentsReport(text: string): { rows: PaymentRow[]; error: 
     };
     return [kept];
   });
+  if (rows.length === 0) return { rows: [], error: "The payments report has a header but no payment rows could be read." };
   return { rows, error: null };
 }
 
